@@ -106,6 +106,14 @@ def dedupe(values: list[str]) -> list[str]:
     return list(dict.fromkeys(values))
 
 
+def first_non_empty_env(*names: str) -> str:
+    for name in names:
+        value = os.environ.get(name)
+        if value is not None and value.strip():
+            return value
+    return ""
+
+
 def clone_or_update_repo(repo_name: str, target_dir: Path) -> None:
     if target_dir.exists():
         run(["git", "-C", str(target_dir), "reset", "--hard", "HEAD"])
@@ -166,8 +174,10 @@ def build_repo(
 
     script = str(build["command"]).strip()
     env = os.environ.copy()
-    env["SAFEDEBREPO_SOURCE"] = "/workspace/source"
-    env["SAFEDEBREPO_OUTPUT"] = "/workspace/output"
+    env["SAFEAPTREPO_SOURCE"] = "/workspace/source"
+    env["SAFEAPTREPO_OUTPUT"] = "/workspace/output"
+    env["SAFEDEBREPO_SOURCE"] = env["SAFEAPTREPO_SOURCE"]
+    env["SAFEDEBREPO_OUTPUT"] = env["SAFEAPTREPO_OUTPUT"]
     host_uid = os.getuid()
     host_gid = os.getgid()
 
@@ -210,6 +220,10 @@ def build_repo(
             f"type=bind,src={output_dir.resolve()},dst=/workspace/output",
             "-w",
             "/workspace/source",
+            "-e",
+            "SAFEAPTREPO_SOURCE=/workspace/source",
+            "-e",
+            "SAFEAPTREPO_OUTPUT=/workspace/output",
             "-e",
             "SAFEDEBREPO_SOURCE=/workspace/source",
             "-e",
@@ -337,8 +351,14 @@ def export_public_key_binary(homedir: Path, key_id: str, site_root: Path, key_na
 
 def prepare_signing_key() -> tuple[Path, str, str]:
     homedir = Path(tempfile.mkdtemp(prefix="safelibs-gpg-"))
-    private_key = os.environ.get("SAFEDEBREPO_GPG_PRIVATE_KEY", "").strip()
-    passphrase = os.environ.get("SAFEDEBREPO_GPG_PASSPHRASE", "")
+    private_key = first_non_empty_env(
+        "SAFEAPTREPO_GPG_PRIVATE_KEY",
+        "SAFEDEBREPO_GPG_PRIVATE_KEY",
+    ).strip()
+    passphrase = first_non_empty_env(
+        "SAFEAPTREPO_GPG_PASSPHRASE",
+        "SAFEDEBREPO_GPG_PASSPHRASE",
+    )
 
     if private_key:
         run(

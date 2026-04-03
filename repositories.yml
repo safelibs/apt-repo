@@ -1,14 +1,14 @@
 archive:
-  suite: stable
+  suite: noble
   component: main
   origin: SafeLibs
   label: SafeLibs
-  description: Memory-safe drop-in replacements packaged by SafeLibs
-  homepage: https://github.com/safelibs/deb-repo
-  base_url: https://safelibs.github.io/deb-repo/
+  description: Memory-safe drop-in replacements packaged by SafeLibs for Ubuntu 24.04
+  homepage: https://github.com/safelibs/apt-repo
+  base_url: https://safelibs.github.io/apt-repo/
   key_name: safelibs
   pin_priority: 1001
-  image: debian:trixie-slim
+  image: ubuntu:24.04
   install_packages:
     - ca-certificates
     - file
@@ -38,8 +38,8 @@ repositories:
         - rustc
       command: |
         safe/tools/build-debs.sh \
-          --workspace "$SAFEDEBREPO_SOURCE" \
-          --out "$SAFEDEBREPO_OUTPUT"
+          --workspace "$SAFEAPTREPO_SOURCE" \
+          --out "$SAFEAPTREPO_OUTPUT"
       artifact_globs:
         - "*.deb"
 
@@ -84,6 +84,6 @@ repositories:
         - zlib1g-dev
       command: |
         bash safe/scripts/build-deb.sh
-        cp -v safe/out/*.deb "$SAFEDEBREPO_OUTPUT"/
+        cp -v safe/out/*.deb "$SAFEAPTREPO_OUTPUT"/
       artifact_globs:
         - "*.deb"

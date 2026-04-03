@@ -44,15 +44,15 @@ def completed(stdout: str = "", stderr: str = "") -> subprocess.CompletedProcess
 
 def archive_config() -> dict[str, str]:
     return {
-        "suite": "stable",
+        "suite": "noble",
         "component": "main",
         "origin": "SafeLibs",
         "label": "SafeLibs",
-        "description": "Test repo",
+        "description": "Test repo for Ubuntu 24.04",
         "homepage": "https://example.invalid/project",
-        "base_url": "https://example.invalid/repo/",
+        "base_url": "https://example.invalid/apt-repo/",
         "key_name": "safelibs",
-        "image": "debian:trixie-slim",
+        "image": "ubuntu:24.04",
     }
 
 
@@ -266,7 +266,7 @@ class BuildSiteTests(unittest.TestCase):
         config_path = Path(__file__).resolve().parent.parent / "repositories.yml"
         loaded = build_site.load_config(config_path)
 
-        self.assertEqual(loaded["archive"]["suite"], "stable")
+        self.assertEqual(loaded["archive"]["suite"], "noble")
         self.assertEqual(loaded["archive"]["key_name"], "safelibs")
         self.assertEqual(
             [entry["name"] for entry in loaded["repositories"]],
@@ -350,7 +350,7 @@ class BuildSiteTests(unittest.TestCase):
                 },
                 source_dir,
                 artifact_root,
-                "debian:trixie-slim",
+                "ubuntu:24.04",
                 [],
             )
 
@@ -377,7 +377,7 @@ class BuildSiteTests(unittest.TestCase):
                     },
                     source_dir,
                     artifact_root,
-                    "debian:trixie-slim",
+                    "ubuntu:24.04",
                     [],
                 )
 
@@ -401,7 +401,7 @@ class BuildSiteTests(unittest.TestCase):
                     },
                     source_dir,
                     artifact_root,
-                    "debian:trixie-slim",
+                    "ubuntu:24.04",
                     [],
                 )
 
@@ -426,7 +426,7 @@ class BuildSiteTests(unittest.TestCase):
                     },
                     source_dir,
                     artifact_root,
-                    "debian:trixie-slim",
+                    "ubuntu:24.04",
                     [],
                 )
 
@@ -462,6 +462,8 @@ class BuildSiteTests(unittest.TestCase):
                 self.assertIn("echo extra-setup", docker_script)
                 self.assertIn("cd pkg", docker_script)
                 env = kwargs["env"]
+                self.assertEqual(env["SAFEAPTREPO_SOURCE"], "/workspace/source")
+                self.assertEqual(env["SAFEAPTREPO_OUTPUT"], "/workspace/output")
                 self.assertEqual(env["SAFEDEBREPO_SOURCE"], "/workspace/source")
                 self.assertEqual(env["SAFEDEBREPO_OUTPUT"], "/workspace/output")
                 output_dir.mkdir(parents=True, exist_ok=True)
@@ -473,7 +475,7 @@ class BuildSiteTests(unittest.TestCase):
                     entry,
                     source_dir,
                     artifact_root,
-                    "debian:trixie-slim",
+                    "ubuntu:24.04",
                     ["ca-certificates", "git"],
                 )
 
@@ -501,7 +503,7 @@ class BuildSiteTests(unittest.TestCase):
                         },
                         source_dir,
                         artifact_root,
-                        "debian:trixie-slim",
+                        "ubuntu:24.04",
                         [],
                     )
 
@@ -511,8 +513,8 @@ class BuildSiteTests(unittest.TestCase):
                 mock.patch.dict(
                     os.environ,
                     {
-                        "SAFEDEBREPO_GPG_PRIVATE_KEY": "PRIVATE KEY",
-                        "SAFEDEBREPO_GPG_PASSPHRASE": "secret",
+                        "SAFEAPTREPO_GPG_PRIVATE_KEY": "PRIVATE KEY",
+                        "SAFEAPTREPO_GPG_PASSPHRASE": "secret",
                     },
                     clear=False,
                 ),
@@ -531,6 +533,31 @@ class BuildSiteTests(unittest.TestCase):
         self.assertEqual(run_mock.call_args_list[0].kwargs["input_text"], "PRIVATE KEY")
         self.assertEqual(run_mock.call_args_list[0].args[0][:4], ["gpg", "--batch", "--homedir", tmp])
 
+    def test_prepare_signing_key_falls_back_to_legacy_environment_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "SAFEDEBREPO_GPG_PRIVATE_KEY": "LEGACY PRIVATE KEY",
+                        "SAFEDEBREPO_GPG_PASSPHRASE": "legacy-secret",
+                    },
+                    clear=True,
+                ),
+                mock.patch("tools.build_site.tempfile.mkdtemp", return_value=tmp),
+                mock.patch("tools.build_site.run") as run_mock,
+            ):
+                run_mock.side_effect = [
+                    completed(),
+                    completed(stdout="fpr:::::::::ABCDEF1234567890:\n"),
+                ]
+                homedir, fingerprint, passphrase = build_site.prepare_signing_key()
+
+        self.assertEqual(homedir, Path(tmp))
+        self.assertEqual(fingerprint, "ABCDEF1234567890")
+        self.assertEqual(passphrase, "legacy-secret")
+        self.assertEqual(run_mock.call_args_list[0].kwargs["input_text"], "LEGACY PRIVATE KEY")
+
     def test_prepare_signing_key_requires_discoverable_fingerprint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with (
@@ -547,11 +574,11 @@ class BuildSiteTests(unittest.TestCase):
     def test_sign_release_passes_through_passphrase(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             site_root = Path(tmp)
-            release_dir = site_root / "dists" / "stable"
+            release_dir = site_root / "dists" / "noble"
             release_dir.mkdir(parents=True)
             (release_dir / "Release").write_text("Origin: SafeLibs\n")
             with mock.patch("tools.build_site.run") as run_mock:
-                build_site.sign_release(site_root, "stable", Path("/tmp/keyring"), "ABC123", "secret")
+                build_site.sign_release(site_root, "noble", Path("/tmp/keyring"), "ABC123", "secret")
 
         clearsign_args = run_mock.call_args_list[0].args[0]
         detach_args = run_mock.call_args_list[1].args[0]
@@ -590,12 +617,12 @@ class BuildSiteTests(unittest.TestCase):
             self.assertTrue((output_dir / "safelibs.asc").exists())
             self.assertTrue((output_dir / "safelibs.gpg").exists())
             self.assertTrue((output_dir / "safelibs.pref").exists())
-            self.assertTrue((output_dir / "dists/stable/InRelease").exists())
-            packages_text = (output_dir / "dists/stable/main/binary-amd64/Packages").read_text()
+            self.assertTrue((output_dir / "dists/noble/InRelease").exists())
+            packages_text = (output_dir / "dists/noble/main/binary-amd64/Packages").read_text()
             self.assertIn("Package: libalpha1", packages_text)
             self.assertIn("Package: libbeta1", packages_text)
             self.assertIn("\n\nPackage: libbeta1", packages_text)
-            release_text = (output_dir / "dists/stable/Release").read_text()
+            release_text = (output_dir / "dists/noble/Release").read_text()
             self.assertIn("Origin: SafeLibs", release_text)
             pref_text = (output_dir / "safelibs.pref").read_text()
             self.assertIn("Package: libalpha1 libbeta1", pref_text)
@@ -642,7 +669,7 @@ class BuildSiteTests(unittest.TestCase):
         build_mock.assert_not_called()
         self.assertEqual(generate_mock.call_args.args[1], [artifact_a, artifact_b])
         self.assertEqual(
-            generate_mock.call_args.kwargs["base_url"], "https://example.invalid/repo/"
+            generate_mock.call_args.kwargs["base_url"], "https://example.invalid/apt-repo/"
         )
 
     def test_main_build_flow_syncs_and_builds_repositories(self) -> None:
@@ -691,7 +718,7 @@ class BuildSiteTests(unittest.TestCase):
         )
         self.assertEqual(
             build_mock.call_args_list[0].args[3:],
-            ("debian:trixie-slim", ["ca-certificates", "git"]),
+            ("ubuntu:24.04", ["ca-certificates", "git"]),
         )
         self.assertEqual(
             generate_mock.call_args.args[1],

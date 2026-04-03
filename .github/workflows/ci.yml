@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
-      BASE_URL: https://safelibs.github.io/deb-repo/
+      BASE_URL: https://safelibs.github.io/apt-repo/
     steps:
       - uses: actions/checkout@v4
 
@@ -33,6 +33,5 @@ jobs:
       - name: Build Pages site
         run: make build-site
 
-      - name: Verify apt repo in Debian Docker
+      - name: Verify apt repo in Ubuntu 24.04 Docker
         run: make verify-docker
-

@@ -16,9 +16,11 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
+      SAFEAPTREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEAPTREPO_GPG_PRIVATE_KEY }}
+      SAFEAPTREPO_GPG_PASSPHRASE: ${{ secrets.SAFEAPTREPO_GPG_PASSPHRASE }}
       SAFEDEBREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEDEBREPO_GPG_PRIVATE_KEY }}
       SAFEDEBREPO_GPG_PASSPHRASE: ${{ secrets.SAFEDEBREPO_GPG_PASSPHRASE }}
-      BASE_URL: https://safelibs.github.io/deb-repo/
+      BASE_URL: https://safelibs.github.io/apt-repo/
     steps:
       - uses: actions/checkout@v4
 
@@ -28,8 +30,8 @@ jobs:
             echo "SAFELIBS_REPO_TOKEN is required to clone private safelibs/port-* repos" >&2
             exit 1
           }
-          test -n "${SAFEDEBREPO_GPG_PRIVATE_KEY}" || {
-            echo "SAFEDEBREPO_GPG_PRIVATE_KEY is required for Pages deployment" >&2
+          test -n "${SAFEAPTREPO_GPG_PRIVATE_KEY:-${SAFEDEBREPO_GPG_PRIVATE_KEY:-}}" || {
+            echo "SAFEAPTREPO_GPG_PRIVATE_KEY (or legacy SAFEDEBREPO_GPG_PRIVATE_KEY) is required for Pages deployment" >&2
             exit 1
           }
 
@@ -44,7 +46,7 @@ jobs:
       - name: Build Pages site
         run: make build-site
 
-      - name: Verify apt repo in Debian Docker
+      - name: Verify apt repo in Ubuntu 24.04 Docker
         run: make verify-docker
 
       - name: Upload Pages artifact

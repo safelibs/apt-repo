@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 SITE_DIR=${1:-"$ROOT_DIR/site"}
 CONFIG_PATH=${2:-"$ROOT_DIR/repositories.yml"}
-IMAGE=${SAFEDEBREPO_VERIFY_IMAGE:-debian:trixie-slim}
+IMAGE=${SAFEAPTREPO_VERIFY_IMAGE:-${SAFEDEBREPO_VERIFY_IMAGE:-ubuntu:24.04}}
 
 if [[ ! -d "$SITE_DIR" ]]; then
   printf 'site directory does not exist: %s\n' "$SITE_DIR" >&2
@@ -31,6 +31,7 @@ fi
 
 docker run --rm \
   --mount "type=bind,src=$(cd "$SITE_DIR" && pwd),dst=/repo,readonly" \
+  -e SAFEAPTREPO_VERIFY_PACKAGES="$packages_csv" \
   -e SAFEDEBREPO_VERIFY_PACKAGES="$packages_csv" \
   "$IMAGE" \
   bash -lc '
@@ -41,10 +42,10 @@ docker run --rm \
     install -D -m 0644 /repo/safelibs.gpg /usr/share/keyrings/safelibs.gpg
     install -D -m 0644 /repo/safelibs.pref /etc/apt/preferences.d/safelibs.pref
     cat >/etc/apt/sources.list.d/safelibs.list <<EOF
-deb [signed-by=/usr/share/keyrings/safelibs.gpg] file:///repo stable main
+deb [signed-by=/usr/share/keyrings/safelibs.gpg] file:///repo noble main
 EOF
     apt-get update
-    IFS=, read -r -a packages <<<"$SAFEDEBREPO_VERIFY_PACKAGES"
+    IFS=, read -r -a packages <<<"${SAFEAPTREPO_VERIFY_PACKAGES:-${SAFEDEBREPO_VERIFY_PACKAGES:-}}"
     apt-get install -y --no-install-recommends --allow-downgrades "${packages[@]}"
     for package in "${packages[@]}"; do
       version="$(dpkg-query -W -f='\''${Version}'\'' "$package")"

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SafeLibs Debian Repository</title>
+  <title>SafeLibs Apt Repository</title>
   <style>
     :root {{
       --bg: #f1f4ef;
@@ -133,10 +133,10 @@
     <section class="hero">
       <article class="panel lead">
         <div class="chip">Static apt repository on GitHub Pages</div>
-        <h1>SafeLibs Debian Repository</h1>
+        <h1>SafeLibs Apt Repository</h1>
         <p>
           Memory-safe drop-in packages for selected C libraries, published as a
-          signed static apt repository.
+          signed static apt repository for Ubuntu 24.04.
         </p>
         <pre><code>sudo install -d -m 0755 /etc/apt/keyrings /etc/apt/preferences.d
 curl -fsSL {base_url}/{key_name}.gpg | sudo tee /etc/apt/keyrings/{key_name}.gpg > /dev/null
@@ -176,12 +176,12 @@ sudo apt-get update</code></pre>
         <p>{description}</p>
         <p>
           The site is generated from pinned SafeLibs package repos, then verified
-          with <code>apt</code> inside Debian Docker before publication.
+          with <code>apt</code> inside Ubuntu 24.04 Docker before publication.
         </p>
         <p>
           Install the published <code>{key_name}.pref</code> file so
-          <code>apt</code> prefers the SafeLibs builds even when Debian carries a
-          newer upstream version.
+          <code>apt</code> prefers the SafeLibs builds even when Ubuntu later
+          carries a newer upstream version.
         </p>
       </article>
     </section>
