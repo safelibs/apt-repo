@@ -81,5 +81,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-yaml
+
       - name: Verify public apt repo in Ubuntu 24.04 Docker
         run: bash scripts/verify-in-ubuntu-docker.sh "${PAGE_URL}" repositories.yml
