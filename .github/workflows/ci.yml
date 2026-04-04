@@ -7,20 +7,10 @@ on:
       - main
 
 jobs:
-  build-and-verify:
+  unit-tests:
     runs-on: ubuntu-24.04
-    env:
-      GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
-      BASE_URL: https://safelibs.github.io/apt-repo/
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check required CI secret
-        run: |
-          test -n "${GH_TOKEN}" || {
-            echo "SAFELIBS_REPO_TOKEN is required to clone private safelibs/port-* repos" >&2
-            exit 1
-          }
 
       - name: Install host dependencies
         run: |
@@ -29,6 +19,21 @@ jobs:
 
       - name: Unit tests
         run: make test
+
+  build-and-verify:
+    if: ${{ secrets.SAFELIBS_REPO_TOKEN != '' }}
+    needs: unit-tests
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
+      BASE_URL: https://safelibs.github.io/apt-repo/
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apt-utils gnupg python3-yaml
 
       - name: Build Pages site
         run: make build-site

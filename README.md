@@ -99,13 +99,16 @@ still accepted during the rename.
 
 ## CI Notes
 
-The Actions workflows expect:
+The `ci` workflow always runs unit tests. Its full site build plus Docker
+verification run only when `SAFELIBS_REPO_TOKEN` is configured with read access
+to the private `safelibs/port-*` repos.
 
-- `SAFELIBS_REPO_TOKEN`: token with read access to the private `safelibs/port-*`
-  repos
-- `SAFEAPTREPO_GPG_PRIVATE_KEY`: only required for Pages deployment
-- `SAFEAPTREPO_GPG_PASSPHRASE`: optional, only required if the deployment key is
-  passphrase-protected
+The `pages` workflow only builds and deploys when both of the following are
+available:
 
-The Pages workflow also still accepts the legacy `SAFEDEBREPO_GPG_*` secret
-names while the rename is in flight.
+- `SAFELIBS_REPO_TOKEN`
+- `SAFEAPTREPO_GPG_PRIVATE_KEY`, or the legacy
+  `SAFEDEBREPO_GPG_PRIVATE_KEY` while the rename is in flight
+
+`SAFEAPTREPO_GPG_PASSPHRASE` remains optional and is only needed when the
+deployment key is passphrase-protected.

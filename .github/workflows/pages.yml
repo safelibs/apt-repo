@@ -12,7 +12,16 @@ permissions:
   id-token: write
 
 jobs:
+  skip-missing-secrets:
+    if: ${{ secrets.SAFELIBS_REPO_TOKEN == '' || (secrets.SAFEAPTREPO_GPG_PRIVATE_KEY == '' && secrets.SAFEDEBREPO_GPG_PRIVATE_KEY == '') }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Explain skipped deployment
+        run: |
+          echo "Skipping Pages deploy because SAFELIBS_REPO_TOKEN or a SafeLibs archive signing key is not configured."
+
   build:
+    if: ${{ secrets.SAFELIBS_REPO_TOKEN != '' && (secrets.SAFEAPTREPO_GPG_PRIVATE_KEY != '' || secrets.SAFEDEBREPO_GPG_PRIVATE_KEY != '') }}
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
@@ -23,17 +32,6 @@ jobs:
       BASE_URL: https://safelibs.github.io/apt-repo/
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check required deployment secrets
-        run: |
-          test -n "${GH_TOKEN}" || {
-            echo "SAFELIBS_REPO_TOKEN is required to clone private safelibs/port-* repos" >&2
-            exit 1
-          }
-          test -n "${SAFEAPTREPO_GPG_PRIVATE_KEY:-${SAFEDEBREPO_GPG_PRIVATE_KEY:-}}" || {
-            echo "SAFEAPTREPO_GPG_PRIVATE_KEY (or legacy SAFEDEBREPO_GPG_PRIVATE_KEY) is required for Pages deployment" >&2
-            exit 1
-          }
 
       - name: Install host dependencies
         run: |
