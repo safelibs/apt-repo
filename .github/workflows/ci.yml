@@ -7,6 +7,21 @@ on:
       - main
 
 jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
+    outputs:
+      has_repo_token: ${{ steps.check.outputs.has_repo_token }}
+    steps:
+      - id: check
+        run: |
+          if test -n "${GH_TOKEN}"; then
+            echo "has_repo_token=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "has_repo_token=false" >>"${GITHUB_OUTPUT}"
+          fi
+
   unit-tests:
     runs-on: ubuntu-24.04
     steps:
@@ -21,8 +36,10 @@ jobs:
         run: make test
 
   build-and-verify:
-    if: ${{ secrets.SAFELIBS_REPO_TOKEN != '' }}
-    needs: unit-tests
+    if: ${{ needs.preflight.outputs.has_repo_token == 'true' }}
+    needs:
+      - preflight
+      - unit-tests
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}

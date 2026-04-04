@@ -12,16 +12,43 @@ permissions:
   id-token: write
 
 jobs:
-  skip-missing-secrets:
-    if: ${{ secrets.SAFELIBS_REPO_TOKEN == '' || (secrets.SAFEAPTREPO_GPG_PRIVATE_KEY == '' && secrets.SAFEDEBREPO_GPG_PRIVATE_KEY == '') }}
+  preflight:
     runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
+      SAFEAPTREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEAPTREPO_GPG_PRIVATE_KEY }}
+      SAFEDEBREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEDEBREPO_GPG_PRIVATE_KEY }}
+    outputs:
+      can_deploy: ${{ steps.check.outputs.can_deploy }}
     steps:
+      - id: check
+        run: |
+          if test -n "${GH_TOKEN}"; then
+            has_repo_token=true
+          else
+            has_repo_token=false
+          fi
+
+          if test -n "${SAFEAPTREPO_GPG_PRIVATE_KEY:-${SAFEDEBREPO_GPG_PRIVATE_KEY:-}}"; then
+            has_signing_key=true
+          else
+            has_signing_key=false
+          fi
+
+          if test "${has_repo_token}" = true && test "${has_signing_key}" = true; then
+            echo "can_deploy=true" >>"${GITHUB_OUTPUT}"
+          else
+            echo "can_deploy=false" >>"${GITHUB_OUTPUT}"
+          fi
+
       - name: Explain skipped deployment
+        if: ${{ steps.check.outputs.can_deploy != 'true' }}
         run: |
           echo "Skipping Pages deploy because SAFELIBS_REPO_TOKEN or a SafeLibs archive signing key is not configured."
 
   build:
-    if: ${{ secrets.SAFELIBS_REPO_TOKEN != '' && (secrets.SAFEAPTREPO_GPG_PRIVATE_KEY != '' || secrets.SAFEDEBREPO_GPG_PRIVATE_KEY != '') }}
+    if: ${{ needs.preflight.outputs.can_deploy == 'true' }}
+    needs: preflight
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
