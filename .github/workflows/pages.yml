@@ -12,43 +12,7 @@ permissions:
   id-token: write
 
 jobs:
-  preflight:
-    runs-on: ubuntu-24.04
-    env:
-      GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
-      SAFEAPTREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEAPTREPO_GPG_PRIVATE_KEY }}
-      SAFEDEBREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEDEBREPO_GPG_PRIVATE_KEY }}
-    outputs:
-      can_deploy: ${{ steps.check.outputs.can_deploy }}
-    steps:
-      - id: check
-        run: |
-          if test -n "${GH_TOKEN}"; then
-            has_repo_token=true
-          else
-            has_repo_token=false
-          fi
-
-          if test -n "${SAFEAPTREPO_GPG_PRIVATE_KEY:-${SAFEDEBREPO_GPG_PRIVATE_KEY:-}}"; then
-            has_signing_key=true
-          else
-            has_signing_key=false
-          fi
-
-          if test "${has_repo_token}" = true && test "${has_signing_key}" = true; then
-            echo "can_deploy=true" >>"${GITHUB_OUTPUT}"
-          else
-            echo "can_deploy=false" >>"${GITHUB_OUTPUT}"
-          fi
-
-      - name: Explain skipped deployment
-        if: ${{ steps.check.outputs.can_deploy != 'true' }}
-        run: |
-          echo "Skipping Pages deploy because SAFELIBS_REPO_TOKEN or a SafeLibs archive signing key is not configured."
-
   build:
-    if: ${{ needs.preflight.outputs.can_deploy == 'true' }}
-    needs: preflight
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
@@ -59,6 +23,23 @@ jobs:
       BASE_URL: https://safelibs.github.io/apt-repo/
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate deployment secrets
+        run: |
+          missing=0
+          if test -z "${GH_TOKEN}"; then
+            echo "Missing required repository secret: SAFELIBS_REPO_TOKEN" >&2
+            missing=1
+          fi
+
+          if test -z "${SAFEAPTREPO_GPG_PRIVATE_KEY:-${SAFEDEBREPO_GPG_PRIVATE_KEY:-}}"; then
+            echo "Missing required repository secret: SAFEAPTREPO_GPG_PRIVATE_KEY (or legacy SAFEDEBREPO_GPG_PRIVATE_KEY)" >&2
+            missing=1
+          fi
+
+          if test "${missing}" -ne 0; then
+            exit 1
+          fi
 
       - name: Install host dependencies
         run: |
@@ -80,6 +61,8 @@ jobs:
           path: site
 
   deploy:
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -89,3 +72,41 @@ jobs:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  verify-publication:
+    runs-on: ubuntu-24.04
+    needs: deploy
+    env:
+      PAGE_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - name: Verify public apt repo endpoints
+        run: |
+          set -euo pipefail
+          if test -z "${PAGE_URL}"; then
+            echo "Deploy job did not expose a page URL." >&2
+            exit 1
+          fi
+
+          targets=(
+            "${PAGE_URL}"
+            "${PAGE_URL}dists/noble/InRelease"
+            "${PAGE_URL}safelibs.gpg"
+          )
+
+          for target in "${targets[@]}"; do
+            echo "Checking ${target}"
+            success=0
+            for attempt in $(seq 1 30); do
+              status=$(curl -fsS -o /dev/null -w '%{http_code}' "${target}" || true)
+              if test "${status}" = "200"; then
+                success=1
+                break
+              fi
+              sleep 10
+            done
+
+            if test "${success}" -ne 1; then
+              echo "Public Pages smoke test failed for ${target}" >&2
+              exit 1
+            fi
+          done
