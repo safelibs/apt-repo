@@ -12,6 +12,7 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "verify-in-ubuntu-docker.sh"
+VERIFY_SITE_PATH = REPO_ROOT / "scripts" / "verify-site.sh"
 
 
 def write_verify_config(path: Path) -> None:
@@ -142,3 +143,40 @@ class VerifyInUbuntuDockerTests(unittest.TestCase):
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PACKAGES"], "libpng16-16t64")
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_REPO_URI"], f"{repo_target}/extra")
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PREFERENCE_FILE"], "safelibs-extra.pref")
+
+
+class VerifySiteTests(unittest.TestCase):
+    def test_verify_site_fails_for_missing_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(VERIFY_SITE_PATH),
+                    str(tmp_path / "site"),
+                    str(tmp_path / "missing.yml"),
+                ],
+                check=False,
+                cwd=REPO_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_verify_site_fails_for_malformed_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_path = tmp_path / "repositories.yml"
+            config_path.write_text("repositories: invalid\n")
+
+            result = subprocess.run(
+                [
+                    "bash",
+                    str(VERIFY_SITE_PATH),
+                    str(tmp_path / "site"),
+                    str(config_path),
+                ],
+                check=False,
+                cwd=REPO_ROOT,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
