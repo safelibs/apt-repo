@@ -184,6 +184,27 @@ class BuildSiteTests(unittest.TestCase):
                     ):
                         build_site.load_config(config_path)
 
+    def test_load_config_rejects_reserved_all_repository_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "repositories.yml"
+            config = config_with_repo(repository=repo_config(build_site.ALL_REPOSITORY_NAME))
+            write_config(config_path, config)
+            with self.assertRaisesRegex(build_site.BuildError, r"name 'all' is reserved"):
+                build_site.load_config(config_path)
+
+    def test_load_config_rejects_duplicate_repository_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "repositories.yml"
+            config = {
+                "archive": archive_config(),
+                "repositories": [repo_config("alpha"), repo_config("alpha")],
+            }
+            write_config(config_path, config)
+            with self.assertRaisesRegex(
+                build_site.BuildError, r"defines duplicate repository name: alpha"
+            ):
+                build_site.load_config(config_path)
+
     def test_load_config_requires_build_mapping(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config_path = Path(tmp) / "repositories.yml"
@@ -667,6 +688,27 @@ class BuildSiteTests(unittest.TestCase):
             alpha_packages = (output_dir / "alpha/dists/noble/main/binary-amd64/Packages").read_text()
             self.assertIn("Package: libalpha1", alpha_packages)
             self.assertNotIn("Package: libbeta1", alpha_packages)
+
+    def test_generate_split_site_rejects_reserved_all_repository_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            deb_a = make_deb(tmp_path, "libalpha1", "1.0+safelibs1")
+            deb_b = make_deb(tmp_path, "libbeta1", "2.0+safelibs1")
+            template_root = Path(__file__).resolve().parent.parent / "templates"
+            config = {
+                "archive": archive_config(),
+                "repositories": [repo_config("beta")],
+            }
+
+            with self.assertRaisesRegex(build_site.BuildError, r"name 'all' is reserved"):
+                build_site.generate_split_site(
+                    config,
+                    {"all": [deb_a], "beta": [deb_b]},
+                    tmp_path / "site",
+                    repository_template_path=template_root / "index.html",
+                    landing_template_path=template_root / "landing.html",
+                    base_url="https://example.invalid/apt-repo/",
+                )
 
     def test_split_stanzas_discards_empty_chunks(self) -> None:
         raw = "Package: a\nArchitecture: amd64\n\nPackage: b\nArchitecture: amd64\n\n"

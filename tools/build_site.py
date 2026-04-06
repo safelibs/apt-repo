@@ -91,12 +91,21 @@ def load_config(path: Path) -> dict[str, Any]:
         if not str(archive.get(field) or "").strip():
             raise BuildError(f"{path} archive must define {field}")
 
+    seen_repository_names: set[str] = set()
     for index, entry in enumerate(repositories, start=1):
         if not isinstance(entry, dict):
             raise BuildError(f"{path} repository #{index} must be a YAML mapping")
         for field in ["name", "github_repo", "ref"]:
             if not str(entry.get(field) or "").strip():
                 raise BuildError(f"{path} repository #{index} must define {field}")
+        repository_name = str(entry["name"]).strip()
+        if repository_name == ALL_REPOSITORY_NAME:
+            raise BuildError(
+                f"{path} repository #{index} name '{ALL_REPOSITORY_NAME}' is reserved"
+            )
+        if repository_name in seen_repository_names:
+            raise BuildError(f"{path} defines duplicate repository name: {repository_name}")
+        seen_repository_names.add(repository_name)
 
         build = entry.get("build")
         if not isinstance(build, dict):
@@ -653,6 +662,12 @@ def generate_split_site(
     base_url: str,
 ) -> list[PublishedRepository]:
     configured_names = [str(entry["name"]) for entry in config["repositories"]]
+    if ALL_REPOSITORY_NAME in configured_names:
+        raise BuildError(f"repository name '{ALL_REPOSITORY_NAME}' is reserved")
+    if len(configured_names) != len(set(configured_names)):
+        raise BuildError("configured repository names must be unique")
+    if ALL_REPOSITORY_NAME in repository_artifacts:
+        raise BuildError(f"repository name '{ALL_REPOSITORY_NAME}' is reserved")
     extra_names = sorted(name for name in repository_artifacts if name not in configured_names)
     repository_names = [
         name for name in [*configured_names, *extra_names] if repository_artifacts.get(name)
