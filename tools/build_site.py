@@ -668,10 +668,12 @@ def generate_split_site(
         raise BuildError("configured repository names must be unique")
     if ALL_REPOSITORY_NAME in repository_artifacts:
         raise BuildError(f"repository name '{ALL_REPOSITORY_NAME}' is reserved")
-    extra_names = sorted(name for name in repository_artifacts if name not in configured_names)
-    repository_names = [
-        name for name in [*configured_names, *extra_names] if repository_artifacts.get(name)
-    ]
+    unexpected_names = sorted(name for name in repository_artifacts if name not in configured_names)
+    if unexpected_names:
+        raise BuildError(
+            "unexpected artifacts for unknown repositories: " + ", ".join(unexpected_names)
+        )
+    repository_names = [name for name in configured_names if repository_artifacts.get(name)]
     all_package_paths = dedupe_paths(
         [path for name in repository_names for path in repository_artifacts[name]]
     )
@@ -763,9 +765,8 @@ def main() -> int:
 
     repository_artifacts: dict[str, list[Path]] = {}
     if args.skip_build:
-        for repo_dir in sorted(artifact_root.iterdir()):
-            if not repo_dir.is_dir():
-                continue
+        for entry in config["repositories"]:
+            repo_dir = artifact_root / str(entry["name"])
             artifacts = dedupe_paths(sorted(repo_dir.glob("*.deb")))
             if artifacts:
                 repository_artifacts[repo_dir.name] = artifacts

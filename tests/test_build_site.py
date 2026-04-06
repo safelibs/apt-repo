@@ -710,13 +710,36 @@ class BuildSiteTests(unittest.TestCase):
                     base_url="https://example.invalid/apt-repo/",
                 )
 
+    def test_generate_split_site_rejects_unconfigured_repository_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            deb_a = make_deb(tmp_path, "libalpha1", "1.0+safelibs1")
+            deb_b = make_deb(tmp_path, "libbeta1", "2.0+safelibs1")
+            template_root = Path(__file__).resolve().parent.parent / "templates"
+            config = {
+                "archive": archive_config(),
+                "repositories": [repo_config("alpha")],
+            }
+
+            with self.assertRaisesRegex(
+                build_site.BuildError, r"unexpected artifacts for unknown repositories: zeta"
+            ):
+                build_site.generate_split_site(
+                    config,
+                    {"alpha": [deb_a], "zeta": [deb_b]},
+                    tmp_path / "site",
+                    repository_template_path=template_root / "index.html",
+                    landing_template_path=template_root / "landing.html",
+                    base_url="https://example.invalid/apt-repo/",
+                )
+
     def test_split_stanzas_discards_empty_chunks(self) -> None:
         raw = "Package: a\nArchitecture: amd64\n\nPackage: b\nArchitecture: amd64\n\n"
         stanzas = build_site.split_stanzas(raw)
         self.assertEqual(len(stanzas), 2)
         self.assertTrue(stanzas[0].startswith("Package: a"))
 
-    def test_main_skip_build_uses_cached_artifacts(self) -> None:
+    def test_main_skip_build_ignores_stale_artifact_directories(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             workspace = tmp_path / "workspace"
@@ -750,7 +773,7 @@ class BuildSiteTests(unittest.TestCase):
         build_mock.assert_not_called()
         self.assertEqual(
             generate_mock.call_args.args[1],
-            {"alpha": [artifact_a], "zeta": [artifact_b]},
+            {"alpha": [artifact_a]},
         )
         self.assertEqual(
             generate_mock.call_args.kwargs["base_url"], "https://example.invalid/apt-repo/"
