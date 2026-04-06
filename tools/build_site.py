@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import os
 import shlex
 import shutil
@@ -12,6 +13,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+
+ALL_REPOSITORY_NAME = "all"
 
 
 class BuildError(RuntimeError):
@@ -25,6 +29,13 @@ class PackageInfo:
     version: str
     architecture: str
     pool_path: Path
+
+
+@dataclass(frozen=True)
+class PublishedRepository:
+    name: str
+    url: str
+    package_infos: tuple[PackageInfo, ...]
 
 
 def run(
@@ -104,6 +115,14 @@ def load_config(path: Path) -> dict[str, Any]:
 
 def dedupe(values: list[str]) -> list[str]:
     return list(dict.fromkeys(values))
+
+
+def join_url(base_url: str, *parts: str) -> str:
+    url = base_url.rstrip("/")
+    clean_parts = [part.strip("/") for part in parts if part.strip("/")]
+    if not clean_parts:
+        return url
+    return "/".join([url, *clean_parts])
 
 
 def first_non_empty_env(*names: str) -> str:
@@ -454,6 +473,22 @@ def fingerprint_display(fingerprint: str) -> str:
     return " ".join(fingerprint[i : i + 4] for i in range(0, len(fingerprint), 4))
 
 
+def repository_file_stem(key_name: str, repository_name: str) -> str:
+    return f"{key_name}-{repository_name}"
+
+
+def repository_lead_text(repository_name: str) -> str:
+    if repository_name == ALL_REPOSITORY_NAME:
+        return (
+            "Memory-safe drop-in packages for the full SafeLibs package set, "
+            "published as a signed static apt repository for Ubuntu 24.04."
+        )
+    return (
+        f"Memory-safe drop-in packages for {repository_name}, published as a "
+        "dedicated signed apt repository for Ubuntu 24.04."
+    )
+
+
 def write_preferences_file(
     site_root: Path,
     archive: dict[str, Any],
@@ -482,15 +517,31 @@ def render_index(
     archive: dict[str, Any],
     package_infos: list[PackageInfo],
     fingerprint: str,
-    base_url: str,
+    repo_url: str,
+    repository_name: str,
 ) -> None:
     package_items = "\n".join(
-        f"          <li><code>{info.name}</code> <span>{info.version}</span></li>"
+        "          <li><code>"
+        f"{html.escape(info.name)}</code> <span>{html.escape(info.version)}</span></li>"
         for info in sorted(package_infos, key=lambda item: item.name)
     )
-    html = template_path.read_text().format(
-        base_url=base_url.rstrip("/"),
-        key_name=archive["key_name"],
+    key_name = str(archive["key_name"])
+    repo_url = repo_url.rstrip("/")
+    file_stem = repository_file_stem(key_name, repository_name)
+    html_text = template_path.read_text().format(
+        page_title=f"SafeLibs Apt Repository ({repository_name})",
+        chip_text=(
+            "Aggregate apt repository"
+            if repository_name == ALL_REPOSITORY_NAME
+            else f"Single-library apt repository: {repository_name}"
+        ),
+        heading="SafeLibs Apt Repository",
+        lead_text=repository_lead_text(repository_name),
+        repository_name=repository_name,
+        repo_url=repo_url,
+        key_name=key_name,
+        preferences_file=f"{file_stem}.pref",
+        list_file=f"{file_stem}.list",
         suite=archive["suite"],
         component=archive["component"],
         origin=archive["origin"],
@@ -499,7 +550,57 @@ def render_index(
         fingerprint=fingerprint_display(fingerprint),
         package_items=package_items,
     )
-    (site_root / "index.html").write_text(html)
+    (site_root / "index.html").write_text(html_text)
+    (site_root / ".nojekyll").write_text("")
+
+
+def render_root_index(
+    template_path: Path,
+    site_root: Path,
+    archive: dict[str, Any],
+    repositories: list[PublishedRepository],
+    fingerprint: str,
+    base_url: str,
+) -> None:
+    all_repo_url = join_url(base_url, ALL_REPOSITORY_NAME)
+    key_name = str(archive["key_name"])
+    all_repo = next(repo for repo in repositories if repo.name == ALL_REPOSITORY_NAME)
+    repo_cards = "\n".join(
+        "\n".join(
+            [
+                '      <article class="panel repo-card stack">',
+                f'        <div class="chip">{html.escape("Aggregate repo" if repo.name == ALL_REPOSITORY_NAME else "Per-library repo")}</div>',
+                f'        <h3><a href="{html.escape(repo.url)}/">{html.escape(repo.name)}</a></h3>',
+                f"        <p>{len(repo.package_infos)} published package{'s' if len(repo.package_infos) != 1 else ''}.</p>",
+                "        <p><code>"
+                + html.escape(", ".join(info.name for info in sorted(repo.package_infos, key=lambda item: item.name)))
+                + "</code></p>",
+                "      </article>",
+            ]
+        )
+        for repo in repositories
+    )
+    package_items = "\n".join(
+        "          <li><code>"
+        f"{html.escape(info.name)}</code> <span>{html.escape(info.version)}</span></li>"
+        for info in sorted(all_repo.package_infos, key=lambda item: item.name)
+    )
+    html_text = template_path.read_text().format(
+        page_title="SafeLibs Apt Repositories",
+        key_name=key_name,
+        suite=archive["suite"],
+        component=archive["component"],
+        origin=archive["origin"],
+        homepage=archive["homepage"],
+        description=archive["description"],
+        fingerprint=fingerprint_display(fingerprint),
+        default_repo_url=all_repo_url,
+        preferences_file=f"{repository_file_stem(key_name, ALL_REPOSITORY_NAME)}.pref",
+        list_file=f"{repository_file_stem(key_name, ALL_REPOSITORY_NAME)}.list",
+        repository_cards=repo_cards,
+        package_items=package_items,
+    )
+    (site_root / "index.html").write_text(html_text)
     (site_root / ".nojekyll").write_text("")
 
 
@@ -510,6 +611,8 @@ def generate_site_from_artifacts(
     *,
     template_path: Path,
     base_url: str,
+    repository_name: str = ALL_REPOSITORY_NAME,
+    signing_key: tuple[Path, str, str] | None = None,
 ) -> list[PackageInfo]:
     if output_dir.exists():
         shutil.rmtree(output_dir)
@@ -523,13 +626,104 @@ def generate_site_from_artifacts(
     if not architectures:
         raise BuildError("no package indexes were generated")
 
-    homedir, fingerprint, passphrase = prepare_signing_key()
+    homedir, fingerprint, passphrase = signing_key or prepare_signing_key()
     export_public_key_binary(homedir, fingerprint, output_dir, str(archive["key_name"]))
     write_release_file(output_dir, suite, component, architectures, archive)
     sign_release(output_dir, suite, homedir, fingerprint, passphrase)
     write_preferences_file(output_dir, archive, infos)
-    render_index(template_path, output_dir, archive, infos, fingerprint, base_url)
+    render_index(
+        template_path,
+        output_dir,
+        archive,
+        infos,
+        fingerprint,
+        base_url,
+        repository_name,
+    )
     return infos
+
+
+def generate_split_site(
+    config: dict[str, Any],
+    repository_artifacts: dict[str, list[Path]],
+    output_dir: Path,
+    *,
+    repository_template_path: Path,
+    landing_template_path: Path,
+    base_url: str,
+) -> list[PublishedRepository]:
+    configured_names = [str(entry["name"]) for entry in config["repositories"]]
+    extra_names = sorted(name for name in repository_artifacts if name not in configured_names)
+    repository_names = [
+        name for name in [*configured_names, *extra_names] if repository_artifacts.get(name)
+    ]
+    all_package_paths = dedupe_paths(
+        [path for name in repository_names for path in repository_artifacts[name]]
+    )
+    if not all_package_paths:
+        raise BuildError("cannot generate site without package artifacts")
+
+    signing_key = prepare_signing_key()
+    _, fingerprint, _ = signing_key
+
+    # Keep the site root installable as the aggregate repository while the root
+    # index page becomes a landing page for the split repo layout.
+    generate_site_from_artifacts(
+        config,
+        all_package_paths,
+        output_dir,
+        template_path=repository_template_path,
+        base_url=base_url,
+        repository_name=ALL_REPOSITORY_NAME,
+        signing_key=signing_key,
+    )
+
+    published_repositories = [
+        PublishedRepository(
+            name=ALL_REPOSITORY_NAME,
+            url=join_url(base_url, ALL_REPOSITORY_NAME),
+            package_infos=tuple(
+                generate_site_from_artifacts(
+                    config,
+                    all_package_paths,
+                    output_dir / ALL_REPOSITORY_NAME,
+                    template_path=repository_template_path,
+                    base_url=join_url(base_url, ALL_REPOSITORY_NAME),
+                    repository_name=ALL_REPOSITORY_NAME,
+                    signing_key=signing_key,
+                )
+            ),
+        )
+    ]
+
+    for repository_name in repository_names:
+        published_repositories.append(
+            PublishedRepository(
+                name=repository_name,
+                url=join_url(base_url, repository_name),
+                package_infos=tuple(
+                    generate_site_from_artifacts(
+                        config,
+                        repository_artifacts[repository_name],
+                        output_dir / repository_name,
+                        template_path=repository_template_path,
+                        base_url=join_url(base_url, repository_name),
+                        repository_name=repository_name,
+                        signing_key=signing_key,
+                    )
+                ),
+            )
+        )
+
+    render_root_index(
+        landing_template_path,
+        output_dir,
+        config["archive"],
+        published_repositories,
+        fingerprint,
+        base_url,
+    )
+    return published_repositories
 
 
 def parse_args() -> argparse.Namespace:
@@ -552,28 +746,31 @@ def main() -> int:
     source_root.mkdir(parents=True, exist_ok=True)
     artifact_root.mkdir(parents=True, exist_ok=True)
 
-    package_paths: list[Path] = []
+    repository_artifacts: dict[str, list[Path]] = {}
     if args.skip_build:
-        for repo_artifacts in sorted(artifact_root.glob("*/*.deb")):
-            package_paths.append(repo_artifacts)
+        for repo_dir in sorted(artifact_root.iterdir()):
+            if not repo_dir.is_dir():
+                continue
+            artifacts = dedupe_paths(sorted(repo_dir.glob("*.deb")))
+            if artifacts:
+                repository_artifacts[repo_dir.name] = artifacts
     else:
         for entry in config["repositories"]:
             source_dir = sync_repo(entry, source_root)
-            package_paths.extend(
-                build_repo(
-                    entry,
-                    source_dir,
-                    artifact_root,
-                    str(archive["image"]),
-                    list(archive.get("install_packages", [])),
-                )
+            repository_artifacts[str(entry["name"])] = build_repo(
+                entry,
+                source_dir,
+                artifact_root,
+                str(archive["image"]),
+                list(archive.get("install_packages", [])),
             )
 
-    generate_site_from_artifacts(
+    generate_split_site(
         config,
-        package_paths,
+        repository_artifacts,
         args.output,
-        template_path=Path(__file__).resolve().parent.parent / "templates" / "index.html",
+        repository_template_path=Path(__file__).resolve().parent.parent / "templates" / "index.html",
+        landing_template_path=Path(__file__).resolve().parent.parent / "templates" / "landing.html",
         base_url=base_url,
     )
     print(f"wrote site to {args.output}")

@@ -38,6 +38,13 @@ currently publishes the package artifacts directly at its `04-test` tag. The
 builder also supports repo-specific Rust toolchain overrides for tags that
 outgrow the Rust version shipped by the base Ubuntu 24.04 image.
 
+The generated site now publishes:
+
+- `/all/`: the aggregate repository with every published SafeLibs package
+- `/<library>/`: one repository per configured library, for example
+  `/libjson/`, `/libpng/`, and `/libzstd/`
+- `/`: a landing page that links to the split repositories
+
 ## Local Usage
 
 Prerequisites:
@@ -66,7 +73,8 @@ Verify the generated repository in Ubuntu 24.04 Docker:
 make verify-docker
 ```
 
-The site output lands in `site/`. If `SAFEAPTREPO_GPG_PRIVATE_KEY` is not set,
+The site output lands in `site/`, with installable repositories under
+`site/all/` and `site/<library>/`. If `SAFEAPTREPO_GPG_PRIVATE_KEY` is not set,
 the builder generates an ephemeral signing key for local/CI verification.
 
 Ubuntu 24.04 already ships the distro packages that these SafeLibs ports
@@ -74,15 +82,19 @@ replace. The generated site therefore also publishes `safelibs.pref`, which
 pins the published SafeLibs packages to priority `1001` so `apt` will select
 them even if Ubuntu later carries a newer upstream version.
 
-Example install:
+Example install for the aggregate `all` repository:
 
 ```bash
 sudo install -d -m 0755 /etc/apt/keyrings /etc/apt/preferences.d
-curl -fsSL https://safelibs.github.io/apt-repo/safelibs.gpg | sudo tee /etc/apt/keyrings/safelibs.gpg > /dev/null
-curl -fsSL https://safelibs.github.io/apt-repo/safelibs.pref | sudo tee /etc/apt/preferences.d/safelibs.pref > /dev/null
-echo "deb [signed-by=/etc/apt/keyrings/safelibs.gpg] https://safelibs.github.io/apt-repo noble main" | sudo tee /etc/apt/sources.list.d/safelibs.list
+curl -fsSL https://safelibs.github.io/apt-repo/all/safelibs.gpg | sudo tee /etc/apt/keyrings/safelibs.gpg > /dev/null
+curl -fsSL https://safelibs.github.io/apt-repo/all/safelibs.pref | sudo tee /etc/apt/preferences.d/safelibs-all.pref > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/safelibs.gpg] https://safelibs.github.io/apt-repo/all noble main" | sudo tee /etc/apt/sources.list.d/safelibs-all.list > /dev/null
 sudo apt-get update
 ```
+
+To install just one port, swap `/all/` for the library-specific repository such
+as `/libjson/`, and use a matching local filename like
+`/etc/apt/preferences.d/safelibs-libjson.pref`.
 
 ## Signing
 

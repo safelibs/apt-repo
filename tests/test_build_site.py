@@ -620,12 +620,53 @@ class BuildSiteTests(unittest.TestCase):
             self.assertIn("Package: libalpha1", packages_text)
             self.assertIn("Package: libbeta1", packages_text)
             self.assertIn("\n\nPackage: libbeta1", packages_text)
+            index_text = (output_dir / "index.html").read_text()
+            self.assertIn("https://example.invalid/repo/safelibs.gpg", index_text)
+            self.assertIn("safelibs-all.pref", index_text)
+            self.assertIn("safelibs-all.list", index_text)
             release_text = (output_dir / "dists/noble/Release").read_text()
             self.assertIn("Origin: SafeLibs", release_text)
             pref_text = (output_dir / "safelibs.pref").read_text()
             self.assertIn("Package: libalpha1 libbeta1", pref_text)
             self.assertIn("Pin: release o=SafeLibs", pref_text)
             self.assertIn("Pin-Priority: 1001", pref_text)
+
+    def test_generate_split_site_creates_all_and_per_library_repositories(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            deb_a = make_deb(tmp_path, "libalpha1", "1.0+safelibs1")
+            deb_b = make_deb(tmp_path, "libbeta1", "2.0+safelibs1")
+            output_dir = tmp_path / "site"
+            template_root = Path(__file__).resolve().parent.parent / "templates"
+            config = {
+                "archive": archive_config(),
+                "repositories": [repo_config("alpha"), repo_config("beta")],
+            }
+
+            published = build_site.generate_split_site(
+                config,
+                {"alpha": [deb_a], "beta": [deb_b]},
+                output_dir,
+                repository_template_path=template_root / "index.html",
+                landing_template_path=template_root / "landing.html",
+                base_url="https://example.invalid/apt-repo/",
+            )
+
+            self.assertEqual([repo.name for repo in published], ["all", "alpha", "beta"])
+            self.assertTrue((output_dir / "dists/noble/InRelease").exists())
+            self.assertTrue((output_dir / "all/dists/noble/InRelease").exists())
+            self.assertTrue((output_dir / "alpha/dists/noble/InRelease").exists())
+            self.assertTrue((output_dir / "beta/dists/noble/InRelease").exists())
+            root_index = (output_dir / "index.html").read_text()
+            self.assertIn("https://example.invalid/apt-repo/all", root_index)
+            self.assertIn('href="https://example.invalid/apt-repo/alpha/"', root_index)
+            self.assertIn('href="https://example.invalid/apt-repo/beta/"', root_index)
+            all_packages = (output_dir / "all/dists/noble/main/binary-amd64/Packages").read_text()
+            self.assertIn("Package: libalpha1", all_packages)
+            self.assertIn("Package: libbeta1", all_packages)
+            alpha_packages = (output_dir / "alpha/dists/noble/main/binary-amd64/Packages").read_text()
+            self.assertIn("Package: libalpha1", alpha_packages)
+            self.assertNotIn("Package: libbeta1", alpha_packages)
 
     def test_split_stanzas_discards_empty_chunks(self) -> None:
         raw = "Package: a\nArchitecture: amd64\n\nPackage: b\nArchitecture: amd64\n\n"
@@ -656,7 +697,7 @@ class BuildSiteTests(unittest.TestCase):
             with (
                 mock.patch("tools.build_site.parse_args", return_value=args),
                 mock.patch("tools.build_site.load_config", return_value=config),
-                mock.patch("tools.build_site.generate_site_from_artifacts") as generate_mock,
+                mock.patch("tools.build_site.generate_split_site") as generate_mock,
                 mock.patch("tools.build_site.sync_repo") as sync_mock,
                 mock.patch("tools.build_site.build_repo") as build_mock,
             ):
@@ -665,7 +706,10 @@ class BuildSiteTests(unittest.TestCase):
         self.assertEqual(result, 0)
         sync_mock.assert_not_called()
         build_mock.assert_not_called()
-        self.assertEqual(generate_mock.call_args.args[1], [artifact_a, artifact_b])
+        self.assertEqual(
+            generate_mock.call_args.args[1],
+            {"alpha": [artifact_a], "zeta": [artifact_b]},
+        )
         self.assertEqual(
             generate_mock.call_args.kwargs["base_url"], "https://example.invalid/apt-repo/"
         )
@@ -703,7 +747,7 @@ class BuildSiteTests(unittest.TestCase):
                 mock.patch("tools.build_site.load_config", return_value=config),
                 mock.patch("tools.build_site.sync_repo", side_effect=source_dirs) as sync_mock,
                 mock.patch("tools.build_site.build_repo", side_effect=built_artifacts) as build_mock,
-                mock.patch("tools.build_site.generate_site_from_artifacts") as generate_mock,
+                mock.patch("tools.build_site.generate_split_site") as generate_mock,
             ):
                 result = build_site.main()
 
@@ -720,11 +764,13 @@ class BuildSiteTests(unittest.TestCase):
         )
         self.assertEqual(
             generate_mock.call_args.args[1],
-            [
-                workspace / "artifacts" / "alpha" / "alpha.deb",
-                workspace / "artifacts" / "beta" / "beta-a.deb",
-                workspace / "artifacts" / "beta" / "beta-b.deb",
-            ],
+            {
+                "alpha": [workspace / "artifacts" / "alpha" / "alpha.deb"],
+                "beta": [
+                    workspace / "artifacts" / "beta" / "beta-a.deb",
+                    workspace / "artifacts" / "beta" / "beta-b.deb",
+                ],
+            },
         )
         self.assertEqual(
             generate_mock.call_args.kwargs["base_url"], "https://override.invalid/repo/"

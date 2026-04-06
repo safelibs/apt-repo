@@ -29,7 +29,7 @@
       min-height: 100vh;
     }}
     .wrap {{
-      max-width: 980px;
+      max-width: 1120px;
       margin: 0 auto;
       padding: 3rem 1.25rem 4rem;
     }}
@@ -52,6 +52,9 @@
     .meta {{
       padding: 1.5rem;
     }}
+    .stack > * + * {{
+      margin-top: 0.75rem;
+    }}
     h1 {{
       margin: 0 0 0.75rem;
       font-family: "IBM Plex Serif", Georgia, serif;
@@ -65,6 +68,10 @@
       text-transform: uppercase;
       letter-spacing: 0.09em;
       color: var(--accent);
+    }}
+    h3 {{
+      margin: 0;
+      font-size: 1.2rem;
     }}
     p {{
       margin: 0 0 1rem;
@@ -109,8 +116,14 @@
       gap: 1.5rem;
       grid-template-columns: 1fr 1fr;
     }}
-    .stack > * + * {{
-      margin-top: 0.75rem;
+    .repo-grid {{
+      margin-top: 1.5rem;
+      display: grid;
+      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }}
+    .repo-card {{
+      padding: 1.5rem;
     }}
     .fingerprint {{
       font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
@@ -132,20 +145,22 @@
   <main class="wrap">
     <section class="hero">
       <article class="panel lead">
-        <div class="chip">{chip_text}</div>
-        <h1>{heading}</h1>
-        <p>{lead_text}</p>
+        <div class="chip">Split SafeLibs apt repositories</div>
+        <h1>SafeLibs Apt Repositories</h1>
+        <p>
+          Install the full SafeLibs package set from <code>/all/</code>, or pick
+          a per-library repository when you only want one port.
+        </p>
         <pre><code>sudo install -d -m 0755 /etc/apt/keyrings /etc/apt/preferences.d
-curl -fsSL {repo_url}/{key_name}.gpg | sudo tee /etc/apt/keyrings/{key_name}.gpg > /dev/null
-curl -fsSL {repo_url}/{key_name}.pref | sudo tee /etc/apt/preferences.d/{preferences_file} > /dev/null
-echo "deb [signed-by=/etc/apt/keyrings/{key_name}.gpg] {repo_url} {suite} {component}" | sudo tee /etc/apt/sources.list.d/{list_file} > /dev/null
+curl -fsSL {default_repo_url}/{key_name}.gpg | sudo tee /etc/apt/keyrings/{key_name}.gpg > /dev/null
+curl -fsSL {default_repo_url}/{key_name}.pref | sudo tee /etc/apt/preferences.d/{preferences_file} > /dev/null
+echo "deb [signed-by=/etc/apt/keyrings/{key_name}.gpg] {default_repo_url} {suite} {component}" | sudo tee /etc/apt/sources.list.d/{list_file} > /dev/null
 sudo apt-get update</code></pre>
       </article>
 
       <aside class="panel meta stack">
         <div>
           <h2>Archive</h2>
-          <p><strong>Repository:</strong> {repository_name}</p>
           <p><strong>Suite:</strong> {suite}</p>
           <p><strong>Component:</strong> {component}</p>
           <p><strong>Origin:</strong> {origin}</p>
@@ -161,6 +176,10 @@ sudo apt-get update</code></pre>
       </aside>
     </section>
 
+    <section class="repo-grid">
+{repository_cards}
+    </section>
+
     <section class="grid">
       <article class="panel meta">
         <h2>Published Packages</h2>
@@ -173,12 +192,14 @@ sudo apt-get update</code></pre>
         <h2>Repository Notes</h2>
         <p>{description}</p>
         <p>
-          The site is generated from pinned SafeLibs package repos, then verified
-          with <code>apt</code> inside Ubuntu 24.04 Docker before publication.
+          Every generated repository is signed with the same SafeLibs archive
+          key, but each published preference file only pins the packages carried
+          by that repository.
         </p>
         <p>
-          Install the published apt preference file so <code>apt</code> prefers
-          the SafeLibs builds for the package set carried by this repository.
+          The site is generated from pinned SafeLibs package repos, then
+          verified with <code>apt</code> inside Ubuntu 24.04 Docker before
+          publication.
         </p>
       </article>
     </section>
