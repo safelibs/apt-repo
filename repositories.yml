@@ -19,6 +19,55 @@ archive:
     - xz-utils
 
 repositories:
+  - name: cjson
+    github_repo: safelibs/port-cjson
+    ref: refs/tags/cjson/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: giflib
+    github_repo: safelibs/port-giflib
+    ref: refs/tags/giflib/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libarchive
+    github_repo: safelibs/port-libarchive
+    ref: refs/tags/libarchive/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libbz2
+    github_repo: safelibs/port-libbz2
+    ref: refs/tags/libbz2/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libcsv
+    github_repo: safelibs/port-libcsv
+    ref: refs/tags/libcsv/04-test
+    build:
+      mode: checkout-artifacts
+      workdir: .
+      artifact_globs:
+        - "*.deb"
+
+  - name: libjpeg-turbo
+    github_repo: safelibs/port-libjpeg-turbo
+    ref: refs/tags/libjpeg-turbo/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
   - name: libjson
     github_repo: safelibs/port-libjson
     ref: refs/tags/libjson/04-test
@@ -43,6 +92,14 @@ repositories:
       artifact_globs:
         - "*.deb"
 
+  - name: liblzma
+    github_repo: safelibs/port-liblzma
+    ref: refs/tags/liblzma/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
   - name: libpng
     github_repo: safelibs/port-libpng
     ref: refs/tags/libpng/04-test
@@ -53,6 +110,62 @@ repositories:
     build:
       mode: checkout-artifacts
       workdir: .
+      artifact_globs:
+        - "*.deb"
+
+  - name: libsdl
+    github_repo: safelibs/port-libsdl
+    ref: refs/tags/libsdl/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libsodium
+    github_repo: safelibs/port-libsodium
+    ref: refs/tags/libsodium/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libtiff
+    github_repo: safelibs/port-libtiff
+    ref: refs/tags/libtiff/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libvips
+    github_repo: safelibs/port-libvips
+    ref: refs/tags/libvips/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libwebp
+    github_repo: safelibs/port-libwebp
+    ref: refs/tags/libwebp/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libxml
+    github_repo: safelibs/port-libxml
+    ref: refs/tags/libxml/04-test
+    build:
+      mode: safe-debian
+      artifact_globs:
+        - "*.deb"
+
+  - name: libyaml
+    github_repo: safelibs/port-libyaml
+    ref: refs/tags/libyaml/04-test
+    build:
+      mode: safe-debian
       artifact_globs:
         - "*.deb"
 

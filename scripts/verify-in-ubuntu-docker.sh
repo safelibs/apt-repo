@@ -43,11 +43,6 @@ PY
 )
 EOF
 
-if [[ -z "$packages_csv" ]]; then
-  printf 'no verify_packages found in %s\n' "$CONFIG_PATH" >&2
-  exit 1
-fi
-
 preference_name="${key_name}-${REPOSITORY_NAME}.pref"
 repo_uri=
 repo_mode=
@@ -85,6 +80,52 @@ elif [[ "$REPO_TARGET" =~ ^https?:// ]]; then
   madison_source=$repo_uri
 else
   printf 'expected site directory or http(s) base URL, got: %s\n' "$REPO_TARGET" >&2
+  exit 1
+fi
+
+if [[ -z "$packages_csv" ]]; then
+  packages_csv=$(
+    python3 - "$repo_mode" "${repo_dir:-}" "$repo_uri" "$suite" "$component" <<'PY'
+import gzip
+from pathlib import Path
+from urllib.request import urlopen
+import sys
+
+
+def package_csv(text: str) -> str:
+    packages: list[str] = []
+    seen: set[str] = set()
+    for line in text.splitlines():
+        if not line.startswith("Package: "):
+            continue
+        package = line.split(":", 1)[1].strip()
+        if package and package not in seen:
+            seen.add(package)
+            packages.append(package)
+    return ",".join(packages)
+
+
+mode = sys.argv[1]
+suite = sys.argv[4]
+component = sys.argv[5]
+packages_rel = f"dists/{suite}/{component}/binary-amd64/Packages"
+
+if mode == "local":
+    packages_text = (Path(sys.argv[2]) / packages_rel).read_text()
+elif mode == "remote":
+    packages_url = f"{sys.argv[3].rstrip('/')}/{packages_rel}.gz"
+    with urlopen(packages_url) as response:
+        packages_text = gzip.decompress(response.read()).decode()
+else:
+    raise SystemExit(f"unsupported verify mode: {mode}")
+
+print(package_csv(packages_text))
+PY
+  )
+fi
+
+if [[ -z "$packages_csv" ]]; then
+  printf 'no packages found to verify for %s\n' "$REPOSITORY_NAME" >&2
   exit 1
 fi
 

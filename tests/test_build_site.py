@@ -283,6 +283,28 @@ class BuildSiteTests(unittest.TestCase):
         self.assertEqual(loaded["repositories"][0]["build"]["mode"], "checkout-artifacts")
         self.assertNotIn("command", loaded["repositories"][0]["build"])
 
+    def test_load_config_allows_safe_debian_without_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "repositories.yml"
+            write_config(
+                config_path,
+                config_with_repo(
+                    repository={
+                        "name": "safe-debian",
+                        "github_repo": "safelibs/port-safe-debian",
+                        "ref": "refs/tags/safe-debian/04-test",
+                        "build": {
+                            "mode": "safe-debian",
+                            "artifact_globs": ["*.deb"],
+                        },
+                    }
+                ),
+            )
+            loaded = build_site.load_config(config_path)
+
+        self.assertEqual(loaded["repositories"][0]["build"]["mode"], "safe-debian")
+        self.assertNotIn("command", loaded["repositories"][0]["build"])
+
     def test_load_config_accepts_checked_in_repositories_file(self) -> None:
         config_path = Path(__file__).resolve().parent.parent / "repositories.yml"
         loaded = build_site.load_config(config_path)
@@ -291,10 +313,31 @@ class BuildSiteTests(unittest.TestCase):
         self.assertEqual(loaded["archive"]["key_name"], "safelibs")
         self.assertEqual(
             [entry["name"] for entry in loaded["repositories"]],
-            ["libjson", "libpng", "libzstd"],
+            [
+                "cjson",
+                "giflib",
+                "libarchive",
+                "libbz2",
+                "libcsv",
+                "libjpeg-turbo",
+                "libjson",
+                "liblzma",
+                "libpng",
+                "libsdl",
+                "libsodium",
+                "libtiff",
+                "libvips",
+                "libwebp",
+                "libxml",
+                "libyaml",
+                "libzstd",
+            ],
         )
-        self.assertEqual(loaded["repositories"][1]["build"]["mode"], "checkout-artifacts")
-        self.assertNotIn("command", loaded["repositories"][1]["build"])
+        self.assertEqual(loaded["repositories"][0]["build"]["mode"], "safe-debian")
+        self.assertEqual(loaded["repositories"][4]["build"]["mode"], "checkout-artifacts")
+        self.assertNotIn("command", loaded["repositories"][4]["build"])
+        self.assertEqual(loaded["repositories"][8]["build"]["mode"], "checkout-artifacts")
+        self.assertNotIn("command", loaded["repositories"][8]["build"])
 
     def test_clone_or_update_repo_refreshes_existing_checkout(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -496,6 +539,75 @@ class BuildSiteTests(unittest.TestCase):
                     artifact_root,
                     "ubuntu:24.04",
                     ["ca-certificates", "git"],
+                )
+
+        run_mock.assert_called_once()
+        self.assertEqual([path.name for path in artifacts], [artifact_name])
+
+    def test_detect_rust_toolchain_prefers_highest_manifest_requirement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp)
+            (workdir / "Cargo.toml").write_text('\n'.join(['edition = "2021"', '']) )
+            (workdir / "vendor").mkdir()
+            (workdir / "vendor" / "Cargo.toml").write_text(
+                '\n'.join(['rust-version = "1.92"', 'edition = "2024"', ''])
+            )
+            (workdir / "rust-toolchain.toml").write_text(
+                '\n'.join(['[toolchain]', 'channel = "stable"', ''])
+            )
+
+            self.assertEqual(build_site.detect_rust_toolchain(workdir), "1.92")
+
+    def test_detect_rust_toolchain_skips_ubuntu_default_or_older(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workdir = Path(tmp)
+            (workdir / "Cargo.toml").write_text('edition = "2021"\n')
+
+            self.assertEqual(build_site.detect_rust_toolchain(workdir), "")
+
+    def test_build_repo_safe_debian_mode_invokes_docker_and_collects_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_dir = tmp_path / "source"
+            safe_dir = source_dir / "safe"
+            artifact_root = tmp_path / "artifacts"
+            safe_dir.mkdir(parents=True)
+            (safe_dir / "debian").mkdir()
+            (safe_dir / "debian" / "control").write_text("Source: demo\n")
+            (safe_dir / "Cargo.toml").write_text('edition = "2024"\n')
+            artifact_root.mkdir()
+            output_dir = artifact_root / "demo"
+            artifact_name = "demo_1.0_amd64.deb"
+
+            def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                self.assertEqual(args[:2], ["docker", "run"])
+                docker_script = args[-1]
+                self.assertIn(
+                    "apt-get install -y --no-install-recommends ca-certificates file git jq python3 rsync xz-utils curl build-essential devscripts dpkg-dev equivs fakeroot",
+                    docker_script,
+                )
+                self.assertIn("mk-build-deps -i -r -t", docker_script)
+                self.assertIn("dpkg-buildpackage -us -uc -b", docker_script)
+                self.assertIn('cp -v ../*.deb "$SAFEAPTREPO_OUTPUT"/', docker_script)
+                self.assertIn("--default-toolchain 1.85", docker_script)
+                self.assertIn("cd safe", docker_script)
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / artifact_name).write_text("deb")
+                return completed()
+
+            with mock.patch("tools.build_site.run", side_effect=fake_run) as run_mock:
+                artifacts = build_site.build_repo(
+                    {
+                        "name": "demo",
+                        "build": {
+                            "mode": "safe-debian",
+                            "artifact_globs": ["*.deb"],
+                        },
+                    },
+                    source_dir,
+                    artifact_root,
+                    "ubuntu:24.04",
+                    ["ca-certificates", "file", "git", "jq", "python3", "rsync", "xz-utils"],
                 )
 
         run_mock.assert_called_once()

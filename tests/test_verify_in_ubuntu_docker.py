@@ -39,6 +39,25 @@ def write_verify_config(path: Path) -> None:
     )
 
 
+def write_verify_config_without_packages(path: Path) -> None:
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "archive": {
+                    "suite": "noble",
+                    "component": "main",
+                    "key_name": "safelibs",
+                },
+                "repositories": [
+                    {
+                        "name": "demo",
+                    }
+                ],
+            }
+        )
+    )
+
+
 def write_fake_docker(path: Path) -> None:
     path.write_text(
         """#!/usr/bin/env python3
@@ -143,6 +162,59 @@ class VerifyInUbuntuDockerTests(unittest.TestCase):
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PACKAGES"], "libpng16-16t64")
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_REPO_URI"], f"{repo_target}/extra")
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PREFERENCE_FILE"], "safelibs-extra.pref")
+
+    def test_local_mode_derives_packages_from_packages_index_when_not_configured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_path = tmp_path / "repositories.yml"
+            capture_path = tmp_path / "docker-args.json"
+            bin_dir = tmp_path / "bin"
+            docker_path = bin_dir / "docker"
+            site_dir = tmp_path / "site" / "demo" / "dists" / "noble" / "main" / "binary-amd64"
+
+            write_verify_config_without_packages(config_path)
+            bin_dir.mkdir()
+            write_fake_docker(docker_path)
+            site_dir.mkdir(parents=True)
+            (site_dir / "Packages").write_text(
+                "\n".join(
+                    [
+                        "Package: libcjson1",
+                        "Version: 1.0",
+                        "",
+                        "Package: libcjson-dev",
+                        "Version: 1.0",
+                        "",
+                    ]
+                )
+            )
+
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}:{env['PATH']}"
+            env["DOCKER_ARGS_CAPTURE"] = str(capture_path)
+
+            subprocess.run(
+                ["bash", str(SCRIPT_PATH), str(tmp_path / "site"), str(config_path), "demo"],
+                check=True,
+                cwd=REPO_ROOT,
+                env=env,
+            )
+
+            docker_args = json.loads(capture_path.read_text())
+            docker_env: dict[str, str] = {}
+            idx = 0
+            while idx < len(docker_args):
+                if docker_args[idx] == "-e":
+                    name, value = docker_args[idx + 1].split("=", 1)
+                    docker_env[name] = value
+                    idx += 2
+                    continue
+                idx += 1
+
+            self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_MODE"], "local")
+            self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PACKAGES"], "libcjson1,libcjson-dev")
+            self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_REPO_URI"], "file:///repo")
+            self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PREFERENCE_FILE"], "safelibs-demo.pref")
 
 
 class VerifySiteTests(unittest.TestCase):

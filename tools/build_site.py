@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import html
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -16,6 +17,7 @@ import yaml
 
 
 ALL_REPOSITORY_NAME = "all"
+UBUNTU_24_04_RUST_VERSION = "1.75"
 
 
 class BuildError(RuntimeError):
@@ -163,6 +165,76 @@ def sync_repo(entry: dict[str, Any], source_root: Path) -> Path:
     return target_dir
 
 
+_RUST_VERSION_RE = re.compile(r'^\s*rust-version\s*=\s*"([^"]+)"\s*$')
+_RUST_EDITION_RE = re.compile(r'^\s*edition\s*=\s*"([^"]+)"\s*$')
+_RUST_TOOLCHAIN_CHANNEL_RE = re.compile(r'^\s*channel\s*=\s*"([^"]+)"\s*$')
+
+
+def version_key(value: str) -> tuple[int, ...]:
+    if not re.fullmatch(r"\d+(?:\.\d+){0,2}", value):
+        return ()
+    return tuple(int(part) for part in value.split("."))
+
+
+def max_version(candidates: list[str]) -> str:
+    numeric_candidates = [candidate for candidate in candidates if version_key(candidate)]
+    if not numeric_candidates:
+        return ""
+    return max(numeric_candidates, key=version_key)
+
+
+def detect_rust_toolchain(workdir: Path) -> str:
+    candidates: list[str] = []
+    edition_minimums = {
+        "2018": "1.31",
+        "2021": "1.56",
+        "2024": "1.85",
+    }
+
+    for cargo_path in sorted(workdir.rglob("Cargo.toml")):
+        for line in cargo_path.read_text(errors="replace").splitlines():
+            rust_match = _RUST_VERSION_RE.match(line)
+            if rust_match:
+                candidates.append(rust_match.group(1))
+                continue
+            edition_match = _RUST_EDITION_RE.match(line)
+            if edition_match:
+                minimum = edition_minimums.get(edition_match.group(1))
+                if minimum:
+                    candidates.append(minimum)
+
+    for toolchain_name in ["rust-toolchain.toml", "rust-toolchain"]:
+        toolchain_path = workdir / toolchain_name
+        if not toolchain_path.exists():
+            continue
+        for line in toolchain_path.read_text(errors="replace").splitlines():
+            channel_match = _RUST_TOOLCHAIN_CHANNEL_RE.match(line)
+            if channel_match:
+                candidates.append(channel_match.group(1))
+                break
+        else:
+            channel = toolchain_path.read_text(errors="replace").strip().splitlines()
+            if channel:
+                candidates.append(channel[0].strip())
+
+    required = max_version(candidates)
+    if not required:
+        return ""
+    if version_key(required) <= version_key(UBUNTU_24_04_RUST_VERSION):
+        return ""
+    return required
+
+
+def safe_debian_script() -> str:
+    return "\n".join(
+        [
+            'mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control',
+            "dpkg-buildpackage -us -uc -b",
+            'cp -v ../*.deb "$SAFEAPTREPO_OUTPUT"/',
+        ]
+    )
+
+
 def build_repo(
     entry: dict[str, Any],
     source_dir: Path,
@@ -182,7 +254,8 @@ def build_repo(
         shutil.rmtree(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    workdir = source_dir / str(build.get("workdir") or ".")
+    default_workdir = "safe" if mode == "safe-debian" else "."
+    workdir = source_dir / str(build.get("workdir") or default_workdir)
     if not workdir.exists():
         raise BuildError(f"missing workdir for {entry['name']}: {workdir}")
 
@@ -197,10 +270,29 @@ def build_repo(
             raise BuildError(f"no checked-in artifacts found for {entry['name']} under {workdir}")
         return dedupe_paths(artifacts)
 
-    if mode != "docker":
+    if mode == "safe-debian":
+        if "curl" not in packages:
+            packages.append("curl")
+        packages = dedupe(
+            packages
+            + [
+                "build-essential",
+                "devscripts",
+                "dpkg-dev",
+                "equivs",
+                "fakeroot",
+            ]
+        )
+        if not rustup_toolchain:
+            rustup_toolchain = detect_rust_toolchain(workdir)
+        script = safe_debian_script()
+    elif mode == "docker":
+        script = str(build["command"]).strip()
+    else:
         raise BuildError(f"unsupported build mode for {entry['name']}: {mode}")
-
-    script = str(build["command"]).strip()
+    if rustup_toolchain and "curl" not in packages:
+        packages.append("curl")
+    packages = dedupe(packages)
     env = os.environ.copy()
     env["SAFEAPTREPO_SOURCE"] = "/workspace/source"
     env["SAFEAPTREPO_OUTPUT"] = "/workspace/output"

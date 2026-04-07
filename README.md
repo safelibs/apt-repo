@@ -3,11 +3,25 @@
 This repository builds and publishes the static SafeLibs apt repository for
 Ubuntu 24.04 on GitHub Pages.
 
-As of April 3, 2026, the checked-in [`repositories.yml`](./repositories.yml)
-tracks the SafeLibs repos that currently expose a `04-test` tag:
+As of April 7, 2026, the checked-in [`repositories.yml`](./repositories.yml)
+tracks every current `safelibs/port-*` repo that exposes a `04-test` tag:
 
+- `safelibs/port-cjson` at `refs/tags/cjson/04-test`
+- `safelibs/port-giflib` at `refs/tags/giflib/04-test`
+- `safelibs/port-libarchive` at `refs/tags/libarchive/04-test`
+- `safelibs/port-libbz2` at `refs/tags/libbz2/04-test`
+- `safelibs/port-libcsv` at `refs/tags/libcsv/04-test`
+- `safelibs/port-libjpeg-turbo` at `refs/tags/libjpeg-turbo/04-test`
 - `safelibs/port-libjson` at `refs/tags/libjson/04-test`
+- `safelibs/port-liblzma` at `refs/tags/liblzma/04-test`
 - `safelibs/port-libpng` at `refs/tags/libpng/04-test`
+- `safelibs/port-libsdl` at `refs/tags/libsdl/04-test`
+- `safelibs/port-libsodium` at `refs/tags/libsodium/04-test`
+- `safelibs/port-libtiff` at `refs/tags/libtiff/04-test`
+- `safelibs/port-libvips` at `refs/tags/libvips/04-test`
+- `safelibs/port-libwebp` at `refs/tags/libwebp/04-test`
+- `safelibs/port-libxml` at `refs/tags/libxml/04-test`
+- `safelibs/port-libyaml` at `refs/tags/libyaml/04-test`
 - `safelibs/port-libzstd` at `refs/tags/libzstd/04-test`
 
 ## Layout
@@ -25,18 +39,21 @@ tracks the SafeLibs repos that currently expose a `04-test` tag:
 Each repository entry defines:
 
 - the GitHub repo and pinned ref
-- which packages should be installed during Docker verification
-- either an Ubuntu 24.04 container build command or checked-in package artifact mode
+- optionally, which packages should be installed during Docker verification
+- either an Ubuntu 24.04 container build command, the generic `safe-debian`
+  build mode, or checked-in package artifact mode
 - artifact globs to publish
 
 The `archive` block also defines signing, Pages metadata, the default Ubuntu
 24.04 image, and the generated `apt` pin priority.
 
-The build commands are repo-specific on purpose. The current SafeLibs package
-repos do not share one packaging entrypoint yet, and at least one (`libpng`)
-currently publishes the package artifacts directly at its `04-test` tag. The
-builder also supports repo-specific Rust toolchain overrides for tags that
-outgrow the Rust version shipped by the base Ubuntu 24.04 image.
+The build commands remain repo-specific when needed, but most current ports now
+share a generic `safe-debian` path that installs `debian/control`
+`Build-Depends`, auto-detects a sufficiently new Rust toolchain from the repo
+contents, runs `dpkg-buildpackage`, and publishes the resulting `.deb`
+artifacts. A few tags still publish the package artifacts directly
+(`libcsv`, `libpng`), and explicit per-repo commands remain available for cases
+that need them.
 
 The generated site now publishes:
 
@@ -75,7 +92,9 @@ make verify-docker
 ```
 
 `make verify-docker` verifies the explicit `/all/` repository and each
-configured per-library repository.
+configured per-library repository. When a manifest entry omits
+`verify_packages`, the verification script derives the package set directly
+from the published `Packages` index for that repository.
 
 The site output lands in `site/`, with installable repositories under
 `site/all/` and `site/<library>/`. If `SAFEAPTREPO_GPG_PRIVATE_KEY` is not set,
