@@ -95,38 +95,54 @@ if [[ -z "$packages_csv" ]]; then
     python3 - "$repo_mode" "${repo_dir:-}" "$repo_uri" "$suite" "$component" <<'PY'
 import gzip
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import urlopen
 import sys
 
 
-def package_csv(text: str) -> str:
+def package_csv(texts: list[str]) -> str:
     packages: list[str] = []
     seen: set[str] = set()
-    for line in text.splitlines():
-        if not line.startswith("Package: "):
-            continue
-        package = line.split(":", 1)[1].strip()
-        if package and package not in seen:
-            seen.add(package)
-            packages.append(package)
+    for text in texts:
+        for line in text.splitlines():
+            if not line.startswith("Package: "):
+                continue
+            package = line.split(":", 1)[1].strip()
+            if package and package not in seen:
+                seen.add(package)
+                packages.append(package)
     return ",".join(packages)
 
 
 mode = sys.argv[1]
 suite = sys.argv[4]
 component = sys.argv[5]
-packages_rel = f"dists/{suite}/{component}/binary-amd64/Packages"
+packages_rels = [
+    f"dists/{suite}/{component}/binary-amd64/Packages",
+    f"dists/{suite}/{component}/binary-all/Packages",
+]
+packages_texts: list[str] = []
 
 if mode == "local":
-    packages_text = (Path(sys.argv[2]) / packages_rel).read_text()
+    repo_root = Path(sys.argv[2])
+    for packages_rel in packages_rels:
+        packages_path = repo_root / packages_rel
+        if packages_path.exists():
+            packages_texts.append(packages_path.read_text())
 elif mode == "remote":
-    packages_url = f"{sys.argv[3].rstrip('/')}/{packages_rel}.gz"
-    with urlopen(packages_url) as response:
-        packages_text = gzip.decompress(response.read()).decode()
+    base_url = sys.argv[3].rstrip("/")
+    for packages_rel in packages_rels:
+        packages_url = f"{base_url}/{packages_rel}.gz"
+        try:
+            with urlopen(packages_url) as response:
+                packages_texts.append(gzip.decompress(response.read()).decode())
+        except HTTPError as exc:
+            if exc.code != 404:
+                raise
 else:
     raise SystemExit(f"unsupported verify mode: {mode}")
 
-print(package_csv(packages_text))
+print(package_csv(packages_texts))
 PY
   )
 fi
