@@ -280,9 +280,18 @@ def resolve_testing_repositories(config: dict[str, Any]) -> list[dict[str, Any]]
         testing.get("default_build")
         or {"mode": "safe-debian", "artifact_globs": ["*.deb"]}
     )
+    stable_builds = {
+        str(entry["name"]): dict(entry["build"])
+        for entry in config.get("repositories", [])
+        if isinstance(entry, dict) and "name" in entry and "build" in entry
+    }
+
+    def base_build_for(name: str) -> dict[str, Any]:
+        return dict(stable_builds.get(name) or default_build)
+
     discovered_entries = discover_port_repositories(github_org, repository_prefix)
     entries_by_name: dict[str, dict[str, Any]] = {
-        entry["name"]: {**entry, "build": dict(default_build)}
+        entry["name"]: {**entry, "build": base_build_for(entry["name"])}
         for entry in discovered_entries
     }
 
@@ -297,7 +306,7 @@ def resolve_testing_repositories(config: dict[str, Any]) -> list[dict[str, Any]]
                     override.get("github_repo") or f"{github_org}/{repository_prefix}{name}"
                 ),
                 "ref": str(override.get("ref") or "refs/heads/main"),
-                "build": dict(default_build),
+                "build": base_build_for(name),
             },
         )
         merged_entry = dict(base_entry)

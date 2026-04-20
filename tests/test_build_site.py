@@ -446,6 +446,11 @@ class BuildSiteTests(unittest.TestCase):
                     "isArchived": False,
                 },
                 {
+                    "name": "port-alpha",
+                    "defaultBranchRef": {"name": "main"},
+                    "isArchived": False,
+                },
+                {
                     "name": "not-a-port",
                     "defaultBranchRef": {"name": "main"},
                     "isArchived": False,
@@ -458,6 +463,18 @@ class BuildSiteTests(unittest.TestCase):
             ]
         )
         config = {
+            "repositories": [
+                {
+                    "name": "alpha",
+                    "github_repo": "safelibs/port-alpha",
+                    "ref": "refs/tags/alpha/04-test",
+                    "build": {
+                        "mode": "checkout-artifacts",
+                        "workdir": ".",
+                        "artifact_globs": ["*.deb"],
+                    },
+                }
+            ],
             "testing": {
                 "discover": {"github_org": "safelibs", "repository_prefix": "port-"},
                 "default_build": {"mode": "safe-debian", "artifact_globs": ["*.deb"]},
@@ -478,11 +495,14 @@ class BuildSiteTests(unittest.TestCase):
         with mock.patch("tools.build_site.run", return_value=completed(stdout=github_output)):
             entries = build_site.resolve_testing_repositories(config)
 
-        self.assertEqual([entry["name"] for entry in entries], ["beta", "gamma"])
-        self.assertEqual(entries[0]["ref"], "refs/heads/develop")
-        self.assertEqual(entries[0]["build"]["mode"], "safe-debian")
-        self.assertEqual(entries[0]["build"]["packages"], ["pkg-config"])
-        self.assertEqual(entries[1]["github_repo"], "safelibs/port-gamma")
+        self.assertEqual([entry["name"] for entry in entries], ["alpha", "beta", "gamma"])
+        self.assertEqual(entries[0]["ref"], "refs/heads/main")
+        self.assertEqual(entries[0]["build"]["mode"], "checkout-artifacts")
+        self.assertEqual(entries[0]["build"]["workdir"], ".")
+        self.assertEqual(entries[1]["ref"], "refs/heads/develop")
+        self.assertEqual(entries[1]["build"]["mode"], "safe-debian")
+        self.assertEqual(entries[1]["build"]["packages"], ["pkg-config"])
+        self.assertEqual(entries[2]["github_repo"], "safelibs/port-gamma")
 
     def test_build_repo_checkout_artifacts_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
