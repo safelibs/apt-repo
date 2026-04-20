@@ -22,6 +22,8 @@ from typing import Any
 
 import yaml
 
+from tools.build_site import detect_rust_toolchain
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 APT_REPO_ROOT = SCRIPT_DIR.parent
 DEFAULT_CONFIG = APT_REPO_ROOT / "repositories.yml"
@@ -116,8 +118,20 @@ def build_entry_for(
     return {"name": name, "build": dict(DEFAULT_BUILD)}
 
 
+def rustup_setup_lines(toolchain: str) -> list[str]:
+    return [
+        (
+            "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs "
+            f"| sh -s -- -y --profile minimal --default-toolchain {shlex.quote(toolchain)}"
+        ),
+        'source "$HOME/.cargo/env"',
+        "rustc --version",
+        "cargo --version",
+    ]
+
+
 def resolve_build(
-    entry: dict[str, Any], archive: dict[str, Any]
+    entry: dict[str, Any], archive: dict[str, Any], port_dir: Path | None = None
 ) -> tuple[str, str, list[str], list[str], str, str]:
     """Return (mode, workdir, packages, setup_steps, rustup_toolchain, inner_script)."""
     build = dict(entry.get("build") or DEFAULT_BUILD)
@@ -128,21 +142,6 @@ def resolve_build(
     )
     rustup_toolchain = str(build.get("rustup_toolchain") or "").strip()
     setup_script = str(build.get("setup") or "").strip()
-    setup_steps: list[str] = []
-    if rustup_toolchain:
-        setup_steps.extend(
-            [
-                (
-                    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs "
-                    f"| sh -s -- -y --profile minimal --default-toolchain {shlex.quote(rustup_toolchain)}"
-                ),
-                'source "$HOME/.cargo/env"',
-                "rustc --version",
-                "cargo --version",
-            ]
-        )
-    if setup_script:
-        setup_steps.append(setup_script)
 
     if mode == "checkout-artifacts":
         workdir = str(build.get("workdir") or ".")
@@ -150,11 +149,19 @@ def resolve_build(
             'mkdir -p "$SAFEAPTREPO_OUTPUT"\n'
             'cp -v *.deb "$SAFEAPTREPO_OUTPUT"/'
         )
-        return mode, workdir, packages, setup_steps, rustup_toolchain, inner_script
+        return mode, workdir, packages, [], rustup_toolchain, inner_script
 
     if mode == "safe-debian":
         default_workdir = "safe"
+        workdir = str(build.get("workdir") or default_workdir)
         packages = dedupe(packages + SAFE_DEBIAN_EXTRA_PACKAGES)
+        if not rustup_toolchain and port_dir is not None:
+            # Same heuristic build_site.py uses: detect Cargo.lock v4 and
+            # rust-version >= minimum-supported-by-ubuntu. Returns "" if the
+            # system rustc is sufficient.
+            detected = detect_rust_toolchain(port_dir / workdir)
+            if detected:
+                rustup_toolchain = detected
         inner_script = (
             'mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control\n'
             "dpkg-buildpackage -us -uc -b\n"
@@ -162,6 +169,7 @@ def resolve_build(
         )
     elif mode == "docker":
         default_workdir = "."
+        workdir = str(build.get("workdir") or default_workdir)
         command = str(build.get("command") or "").strip()
         if not command:
             raise SystemExit(f"{entry.get('name')}: docker mode requires a command")
@@ -171,7 +179,12 @@ def resolve_build(
 
     if rustup_toolchain and "curl" not in packages:
         packages = dedupe(packages + ["curl"])
-    workdir = str(build.get("workdir") or default_workdir)
+
+    setup_steps: list[str] = []
+    if rustup_toolchain:
+        setup_steps.extend(rustup_setup_lines(rustup_toolchain))
+    if setup_script:
+        setup_steps.append(setup_script)
     return mode, workdir, packages, setup_steps, rustup_toolchain, inner_script
 
 
@@ -208,9 +221,11 @@ def render_container_script(
     return "\n".join(lines)
 
 
-def render_workflow(entry: dict[str, Any], archive: dict[str, Any]) -> str:
+def render_workflow(
+    entry: dict[str, Any], archive: dict[str, Any], port_dir: Path | None = None
+) -> str:
     _mode, workdir, packages, setup_steps, _toolchain, inner_script = resolve_build(
-        entry, archive
+        entry, archive, port_dir
     )
     image = str(
         (entry.get("build") or {}).get("image")
@@ -353,7 +368,7 @@ def main() -> int:
         name = port_name(port_dir)
         entry = build_entry_for(config, name)
         try:
-            content = render_workflow(entry, archive)
+            content = render_workflow(entry, archive, port_dir)
         except SystemExit as exc:
             print(f"{port_dir.name}: {exc}", file=sys.stderr)
             return 2

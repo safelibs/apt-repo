@@ -159,6 +159,63 @@ class RenderWorkflowTests(unittest.TestCase):
         self.assertEqual(entry["build"]["mode"], "safe-debian")
 
 
+class AutoToolchainTests(unittest.TestCase):
+    def test_modern_cargo_lock_triggers_rustup(self):
+        entry = {
+            "name": "cjson",
+            "build": {"mode": "safe-debian", "artifact_globs": ["*.deb"]},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            port = Path(tmp)
+            safe = port / "safe"
+            safe.mkdir()
+            (safe / "Cargo.toml").write_text('[package]\nname = "x"\nedition = "2021"\n')
+            (safe / "Cargo.lock").write_text("version = 4\n")
+            (safe / "debian").mkdir()
+            (safe / "debian" / "control").write_text("Source: x\n")
+            workflow = gen.render_workflow(entry, sample_archive(), port)
+        inner = inner_script_from(workflow)
+        self.assertIn("https://sh.rustup.rs", inner)
+        self.assertIn("--default-toolchain stable", inner)
+        self.assertIn("curl", inner)
+
+    def test_default_rustc_is_sufficient_no_rustup(self):
+        entry = {
+            "name": "plain",
+            "build": {"mode": "safe-debian", "artifact_globs": ["*.deb"]},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            port = Path(tmp)
+            safe = port / "safe"
+            safe.mkdir()
+            (safe / "debian").mkdir()
+            (safe / "debian" / "control").write_text("Source: plain\n")
+            workflow = gen.render_workflow(entry, sample_archive(), port)
+        inner = inner_script_from(workflow)
+        self.assertNotIn("https://sh.rustup.rs", inner)
+
+    def test_explicit_toolchain_overrides_autodetect(self):
+        entry = {
+            "name": "tiff",
+            "build": {
+                "mode": "safe-debian",
+                "rustup_toolchain": "1.80",
+                "artifact_globs": ["*.deb"],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            port = Path(tmp)
+            safe = port / "safe"
+            safe.mkdir()
+            (safe / "Cargo.lock").write_text("version = 4\n")
+            (safe / "debian").mkdir()
+            (safe / "debian" / "control").write_text("Source: tiff\n")
+            workflow = gen.render_workflow(entry, sample_archive(), port)
+        inner = inner_script_from(workflow)
+        self.assertIn("--default-toolchain 1.80", inner)
+        self.assertNotIn("--default-toolchain stable", inner)
+
+
 class WriteWorkflowTests(unittest.TestCase):
     def test_idempotent_write(self):
         entry = {"name": "demo", "build": {"mode": "safe-debian", "artifact_globs": ["*.deb"]}}
