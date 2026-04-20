@@ -330,6 +330,37 @@ repositories:
       artifact_globs:
         - "*.deb"
 
+  - name: libuv
+    github_repo: safelibs/port-libuv
+    ref: refs/tags/libuv/04-test
+    verify_packages:
+      - libuv1t64
+    build:
+      mode: safe-debian
+      setup: |
+        python3 - <<'PY'
+        from pathlib import Path
+
+        replacements = {
+            Path(".cargo/config.toml"): {
+                "/home/yans/safelibs/port-libuv/safe/tools/cc-linker.sh": "/workspace/source/safe/tools/cc-linker.sh",
+            },
+            Path("safe/tools/cc-linker.sh"): {
+                "/home/yans/safelibs/port-libuv/safe/tools/abi-baseline.json": "/workspace/source/safe/tools/abi-baseline.json",
+            },
+        }
+
+        for path, path_replacements in replacements.items():
+            text = path.read_text()
+            for old, new in path_replacements.items():
+                if old not in text:
+                    raise SystemExit(f"missing expected path in {path}: {old}")
+                text = text.replace(old, new)
+            path.write_text(text)
+        PY
+      artifact_globs:
+        - "*.deb"
+
   - name: libvips
     github_repo: safelibs/port-libvips
     ref: refs/tags/libvips/04-test

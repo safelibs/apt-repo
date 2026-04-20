@@ -19,6 +19,7 @@ As of April 20, 2026, the checked-in stable channel in
 - `safelibs/port-libsdl` at `refs/tags/libsdl/04-test`
 - `safelibs/port-libsodium` at `refs/tags/libsodium/04-test`
 - `safelibs/port-libtiff` at `refs/tags/libtiff/04-test`
+- `safelibs/port-libuv` at `refs/tags/libuv/04-test`
 - `safelibs/port-libvips` at `refs/tags/libvips/04-test`
 - `safelibs/port-libwebp` at `refs/tags/libwebp/04-test`
 - `safelibs/port-libxml` at `refs/tags/libxml/04-test`

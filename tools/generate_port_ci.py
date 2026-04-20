@@ -22,10 +22,13 @@ from typing import Any
 
 import yaml
 
-from tools.build_site import detect_rust_toolchain
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 APT_REPO_ROOT = SCRIPT_DIR.parent
+if str(APT_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(APT_REPO_ROOT))
+
+from tools.build_site import detect_rust_toolchain
+
 DEFAULT_CONFIG = APT_REPO_ROOT / "repositories.yml"
 DEFAULT_PORTS_ROOT = APT_REPO_ROOT.parent
 

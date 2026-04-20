@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,8 @@ from pathlib import Path
 import yaml
 
 from tools import generate_port_ci as gen
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def sample_archive() -> dict:
@@ -227,6 +230,33 @@ class WriteWorkflowTests(unittest.TestCase):
             self.assertTrue(dest.exists())
             changed2, _ = gen.write_workflow(port_dir, content)
             self.assertFalse(changed2)
+
+
+class CliTests(unittest.TestCase):
+    def test_script_runs_directly(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_path = tmp_path / "repositories.yml"
+            ports_root = tmp_path / "ports"
+            ports_root.mkdir()
+            config_path.write_text(yaml.safe_dump({"archive": sample_archive(), "repositories": []}))
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(REPO_ROOT / "tools" / "generate_port_ci.py"),
+                    "--config",
+                    str(config_path),
+                    "--ports-root",
+                    str(ports_root),
+                    "--dry-run",
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

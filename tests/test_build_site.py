@@ -329,6 +329,7 @@ class BuildSiteTests(unittest.TestCase):
                 "libsdl",
                 "libsodium",
                 "libtiff",
+                "libuv",
                 "libvips",
                 "libwebp",
                 "libxml",
@@ -342,12 +343,14 @@ class BuildSiteTests(unittest.TestCase):
         self.assertNotIn("command", loaded["repositories"][4]["build"])
         self.assertEqual(loaded["repositories"][10]["build"]["mode"], "checkout-artifacts")
         self.assertNotIn("command", loaded["repositories"][10]["build"])
-        self.assertEqual(loaded["repositories"][14]["build"]["mode"], "docker")
-        self.assertIn("build-check-install", loaded["repositories"][14]["build"]["command"])
-        self.assertIn("dpkg-architecture -qDEB_HOST_MULTIARCH", loaded["repositories"][14]["build"]["command"])
-        self.assertIn('cp -a build-check-install/lib/"$(dpkg-architecture -qDEB_HOST_MULTIARCH)"/libvips*.so*', loaded["repositories"][14]["build"]["command"])
-        self.assertIn("DEB_BUILD_OPTIONS", loaded["repositories"][14]["build"]["command"])
-        self.assertIn("nocheck", loaded["repositories"][14]["build"]["command"])
+        self.assertIn("/workspace/source/safe/tools/cc-linker.sh", loaded["repositories"][14]["build"]["setup"])
+        self.assertIn("/workspace/source/safe/tools/abi-baseline.json", loaded["repositories"][14]["build"]["setup"])
+        self.assertEqual(loaded["repositories"][15]["build"]["mode"], "docker")
+        self.assertIn("build-check-install", loaded["repositories"][15]["build"]["command"])
+        self.assertIn("dpkg-architecture -qDEB_HOST_MULTIARCH", loaded["repositories"][15]["build"]["command"])
+        self.assertIn('cp -a build-check-install/lib/"$(dpkg-architecture -qDEB_HOST_MULTIARCH)"/libvips*.so*', loaded["repositories"][15]["build"]["command"])
+        self.assertIn("DEB_BUILD_OPTIONS", loaded["repositories"][15]["build"]["command"])
+        self.assertIn("nocheck", loaded["repositories"][15]["build"]["command"])
         self.assertEqual(loaded["testing"]["discover"]["github_org"], "safelibs")
         self.assertTrue(loaded["testing"]["allow_build_failures"])
         self.assertEqual(loaded["testing"]["default_build"]["mode"], "safe-debian")
