@@ -1,6 +1,6 @@
 # SafeLibs Apt Repository
 
-This repository builds and publishes the static SafeLibs apt repository for
+This repository assembles and publishes the static SafeLibs apt repository for
 Ubuntu 24.04 on GitHub Pages.
 
 As of April 20, 2026, the checked-in stable channel in
@@ -27,15 +27,17 @@ As of April 20, 2026, the checked-in stable channel in
 - `safelibs/port-libzstd` at `refs/tags/libzstd/04-test`
 
 The testing channel is discovered at build time from non-archived
-`safelibs/port-*` repos. It checks out each repo's current default branch and
-publishes the latest package artifacts that can be built as safe debs,
-regardless of whether the repo has a `04-test` tag.
+`safelibs/port-*` repos. It resolves each repo's current default branch and
+publishes the latest package artifacts available from that commit's GitHub
+release, regardless of whether the repo has a `04-test` tag.
 
 ## Layout
 
-- `repositories.yml`: source of truth for which `safelibs/port-*` repos to pull
-  for stable, plus testing-channel discovery and build overrides
-- `tools/build_site.py`: clone, build, index, sign, and render the Pages site
+- `repositories.yml`: source of truth for which `safelibs/port-*` repos and refs
+  to publish for stable, plus testing-channel discovery and port-CI build
+  overrides
+- `tools/build_site.py`: download release artifacts, index, sign, and render the
+  Pages site
 - `scripts/verify-in-ubuntu-docker.sh`: end-to-end `apt` verification in an
   Ubuntu 24.04 container
 - `.github/workflows/ci.yml`: unit tests plus full build-and-verify
@@ -47,20 +49,18 @@ Each repository entry defines:
 
 - the GitHub repo and pinned ref
 - optionally, which packages should be installed during Docker verification
-- either an Ubuntu 24.04 container build command, the generic `safe-debian`
-  build mode, or checked-in package artifact mode
-- artifact globs to publish
+- the per-port CI build configuration used by `tools/generate_port_ci.py`
+- artifact globs to download from each per-commit GitHub release
 
 The `archive` block also defines signing, Pages metadata, the default Ubuntu
 24.04 image, and the generated `apt` pin priority.
 
-The build commands remain repo-specific when needed, but most current ports now
-share a generic `safe-debian` path that installs `debian/control`
-`Build-Depends`, auto-detects a sufficiently new Rust toolchain from the repo
-contents, runs `dpkg-buildpackage`, and publishes the resulting `.deb`
-artifacts. A few tags still publish the package artifacts directly
-(`libcsv`, `libpng`), and explicit per-repo commands remain available for cases
-that need them.
+Package builds happen in the individual `safelibs/port-*` repositories. Their
+generated `build-debs` workflow publishes a GitHub release named
+`build-<12-char-sha>` for each pushed commit. During site generation,
+`tools/build_site.py` resolves each configured tag or branch ref to a commit,
+derives the matching release tag from that commit SHA, downloads the `.deb`
+assets, and then publishes the signed apt indexes.
 
 The generated site now publishes:
 
@@ -68,7 +68,8 @@ The generated site now publishes:
 - `/<library>/`: one stable repository per tagged library, for example
   `/libjson/`, `/libpng/`, and `/libzstd/`
 - `/testing/all/`: the testing aggregate repository with every latest
-  default-branch SafeLibs package that built successfully
+  default-branch SafeLibs package whose release artifacts downloaded
+  successfully
 - `/testing/<library>/`: one testing repository per latest buildable port
 - `/`: a landing page that links to the split repositories; installs should use
   `/all/`, a library-specific subdirectory, `/testing/all/`, or a testing
@@ -79,7 +80,7 @@ The generated site now publishes:
 Prerequisites:
 
 - `gh` authenticated for access to the private `safelibs/port-*` repos
-- `docker`
+- `docker` for repository verification
 - `gpg`
 - `apt-ftparchive`
 - `python3` with `PyYAML`
@@ -90,7 +91,7 @@ Run unit tests:
 make test
 ```
 
-Build the Pages site:
+Build the Pages site by downloading the per-port release artifacts:
 
 ```bash
 make build-site

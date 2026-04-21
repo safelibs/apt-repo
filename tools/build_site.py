@@ -23,6 +23,8 @@ STABLE_CHANNEL_NAME = "stable"
 TESTING_CHANNEL_NAME = "testing"
 UBUNTU_24_04_RUST_VERSION = "1.75"
 MAX_FAILURE_OUTPUT_CHARS = 12000
+RELEASE_TAG_PREFIX = "build-"
+RELEASE_TAG_COMMIT_CHARS = 12
 
 
 class BuildError(RuntimeError):
@@ -220,6 +222,67 @@ def clone_or_update_repo(repo_name: str, target_dir: Path) -> None:
         run(["gh", "repo", "clone", repo_name, str(target_dir)])
         return
     raise BuildError("gh is required to clone private safelibs repositories")
+
+
+def require_gh() -> None:
+    if not shutil.which("gh"):
+        raise BuildError("gh is required to download SafeLibs release artifacts")
+
+
+def gh_api_json(endpoint: str) -> Any:
+    result = run(["gh", "api", endpoint], capture_output=True)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise BuildError(f"failed to parse GitHub API response for {endpoint}") from exc
+
+
+def release_tag_for_commit(commit_sha: str) -> str:
+    commit = commit_sha.strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise BuildError(f"invalid commit SHA for release lookup: {commit_sha}")
+    return f"{RELEASE_TAG_PREFIX}{commit[:RELEASE_TAG_COMMIT_CHARS]}"
+
+
+def resolve_git_object_to_commit(github_repo: str, object_sha: str, object_type: str) -> str:
+    seen_tags: set[str] = set()
+    resolved_sha = object_sha
+    resolved_type = object_type
+    while resolved_type == "tag":
+        if resolved_sha in seen_tags:
+            raise BuildError(f"cycle while resolving tag object {resolved_sha} in {github_repo}")
+        seen_tags.add(resolved_sha)
+        tag_data = gh_api_json(f"repos/{github_repo}/git/tags/{resolved_sha}")
+        tag_object = tag_data.get("object") if isinstance(tag_data, dict) else None
+        if not isinstance(tag_object, dict):
+            raise BuildError(f"failed to resolve tag object {resolved_sha} in {github_repo}")
+        resolved_sha = str(tag_object.get("sha") or "").strip()
+        resolved_type = str(tag_object.get("type") or "").strip()
+
+    if resolved_type != "commit" or not resolved_sha:
+        raise BuildError(
+            f"GitHub ref in {github_repo} resolved to unsupported object type: {resolved_type}"
+        )
+    return resolved_sha
+
+
+def resolve_ref_commit(github_repo: str, ref: str) -> str:
+    require_gh()
+    ref_name = ref.strip()
+    if re.fullmatch(r"[0-9a-fA-F]{40}", ref_name):
+        return ref_name.lower()
+    if ref_name.startswith("refs/"):
+        ref_name = ref_name.removeprefix("refs/")
+    if not ref_name:
+        raise BuildError(f"empty ref for {github_repo}")
+
+    ref_data = gh_api_json(f"repos/{github_repo}/git/ref/{ref_name}")
+    ref_object = ref_data.get("object") if isinstance(ref_data, dict) else None
+    if not isinstance(ref_object, dict):
+        raise BuildError(f"failed to resolve ref {ref} in {github_repo}")
+    object_sha = str(ref_object.get("sha") or "").strip()
+    object_type = str(ref_object.get("type") or "").strip()
+    return resolve_git_object_to_commit(github_repo, object_sha, object_type)
 
 
 def checkout_ref_name(ref: str) -> str:
@@ -1169,29 +1232,59 @@ def collect_cached_artifacts(
     return repository_artifacts
 
 
-def build_repository_entries(
+def download_release_artifacts(
+    entry: dict[str, Any],
+    artifact_root: Path,
+) -> list[Path]:
+    require_gh()
+    build = dict(entry["build"])
+    output_dir = artifact_root / str(entry["name"])
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    github_repo = str(entry["github_repo"])
+    commit_sha = resolve_ref_commit(github_repo, str(entry["ref"]))
+    release_tag = release_tag_for_commit(commit_sha)
+    args = [
+        "gh",
+        "release",
+        "download",
+        release_tag,
+        "--repo",
+        github_repo,
+        "--dir",
+        str(output_dir),
+    ]
+    for pattern in build["artifact_globs"]:
+        args.extend(["--pattern", str(pattern)])
+    run(args, capture_output=True)
+
+    artifacts: list[Path] = []
+    for pattern in build["artifact_globs"]:
+        artifacts.extend(sorted(output_dir.glob(str(pattern))))
+    artifacts = dedupe_paths(artifacts)
+    if not artifacts:
+        raise BuildError(
+            f"no release artifacts found for {entry['name']} in "
+            f"{github_repo} release {release_tag} ({commit_sha})"
+        )
+    return artifacts
+
+
+def download_repository_entries(
     entries: list[dict[str, Any]],
     *,
-    source_root: Path,
     artifact_root: Path,
-    default_image: str,
-    default_packages: list[str],
     allow_failures: bool,
     channel_name: str,
 ) -> tuple[dict[str, list[Path]], list[dict[str, Any]]]:
     repository_artifacts: dict[str, list[Path]] = {}
-    built_entries: list[dict[str, Any]] = []
+    downloaded_entries: list[dict[str, Any]] = []
     for entry in entries:
-        print(f"building {channel_name}/{entry['name']}", file=sys.stderr)
+        print(f"downloading {channel_name}/{entry['name']}", file=sys.stderr)
         try:
-            source_dir = sync_repo(entry, source_root)
-            artifacts = build_repo(
-                entry,
-                source_dir,
-                artifact_root,
-                default_image,
-                default_packages,
-            )
+            artifacts = download_release_artifacts(entry, artifact_root)
         except BuildError as exc:
             if not allow_failures:
                 raise
@@ -1201,13 +1294,13 @@ def build_repository_entries(
             )
             continue
         repository_artifacts[str(entry["name"])] = artifacts
-        built_entries.append(entry)
+        downloaded_entries.append(entry)
         print(
-            f"built {channel_name}/{entry['name']}: {len(artifacts)} artifact"
+            f"downloaded {channel_name}/{entry['name']}: {len(artifacts)} artifact"
             f"{'s' if len(artifacts) != 1 else ''}",
             file=sys.stderr,
         )
-    return repository_artifacts, built_entries
+    return repository_artifacts, downloaded_entries
 
 
 def parse_args() -> argparse.Namespace:
@@ -1225,9 +1318,7 @@ def main() -> int:
     config = load_config(args.config)
     archive = config["archive"]
     base_url = args.base_url or str(archive["base_url"])
-    source_root = args.workspace / "sources"
     artifact_root = args.workspace / "artifacts"
-    source_root.mkdir(parents=True, exist_ok=True)
     artifact_root.mkdir(parents=True, exist_ok=True)
     repository_template_path = Path(__file__).resolve().parent.parent / "templates" / "index.html"
     landing_template_path = Path(__file__).resolve().parent.parent / "templates" / "landing.html"
@@ -1243,25 +1334,19 @@ def main() -> int:
             testing_entries,
             artifact_root / TESTING_CHANNEL_NAME,
         )
-        built_testing_entries = [
+        downloaded_testing_entries = [
             entry for entry in testing_entries if str(entry["name"]) in testing_artifacts
         ]
     else:
-        stable_artifacts, _ = build_repository_entries(
+        stable_artifacts, _ = download_repository_entries(
             stable_entries,
-            source_root=source_root,
             artifact_root=artifact_root,
-            default_image=str(archive["image"]),
-            default_packages=list(archive.get("install_packages", [])),
             allow_failures=False,
             channel_name=STABLE_CHANNEL_NAME,
         )
-        testing_artifacts, built_testing_entries = build_repository_entries(
+        testing_artifacts, downloaded_testing_entries = download_repository_entries(
             testing_entries,
-            source_root=source_root,
             artifact_root=artifact_root / TESTING_CHANNEL_NAME,
-            default_image=str(archive["image"]),
-            default_packages=list(archive.get("install_packages", [])),
             allow_failures=testing_allow_failures,
             channel_name=TESTING_CHANNEL_NAME,
         )
@@ -1299,7 +1384,7 @@ def main() -> int:
         if testing_artifacts:
             published_repositories.extend(
                 generate_split_site(
-                    config_with_repositories(config, built_testing_entries),
+                    config_with_repositories(config, downloaded_testing_entries),
                     testing_artifacts,
                     args.output,
                     repository_template_path=repository_template_path,

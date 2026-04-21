@@ -465,6 +465,105 @@ class BuildSiteTests(unittest.TestCase):
         )
         self.assertEqual(result, target_dir)
 
+    def test_release_tag_for_commit_uses_short_build_sha(self) -> None:
+        self.assertEqual(
+            build_site.release_tag_for_commit("0123456789abcdef0123456789abcdef01234567"),
+            "build-0123456789ab",
+        )
+
+    def test_resolve_ref_commit_resolves_lightweight_tag(self) -> None:
+        commit_sha = "0123456789abcdef0123456789abcdef01234567"
+        github_output = json.dumps({"object": {"sha": commit_sha, "type": "commit"}})
+
+        with (
+            mock.patch("tools.build_site.shutil.which", return_value="/usr/bin/gh"),
+            mock.patch("tools.build_site.run", return_value=completed(stdout=github_output)) as run_mock,
+        ):
+            resolved = build_site.resolve_ref_commit(
+                "safelibs/port-demo",
+                "refs/tags/demo/04-test",
+            )
+
+        self.assertEqual(resolved, commit_sha)
+        run_mock.assert_called_once_with(
+            ["gh", "api", "repos/safelibs/port-demo/git/ref/tags/demo/04-test"],
+            capture_output=True,
+        )
+
+    def test_resolve_ref_commit_dereferences_annotated_tag(self) -> None:
+        tag_sha = "abcdef0123456789abcdef0123456789abcdef01"
+        commit_sha = "fedcba9876543210fedcba9876543210fedcba98"
+
+        with (
+            mock.patch("tools.build_site.shutil.which", return_value="/usr/bin/gh"),
+            mock.patch("tools.build_site.run") as run_mock,
+        ):
+            run_mock.side_effect = [
+                completed(stdout=json.dumps({"object": {"sha": tag_sha, "type": "tag"}})),
+                completed(stdout=json.dumps({"object": {"sha": commit_sha, "type": "commit"}})),
+            ]
+            resolved = build_site.resolve_ref_commit(
+                "safelibs/port-demo",
+                "refs/tags/demo/04-test",
+            )
+
+        self.assertEqual(resolved, commit_sha)
+        self.assertEqual(
+            [call.args[0] for call in run_mock.call_args_list],
+            [
+                ["gh", "api", "repos/safelibs/port-demo/git/ref/tags/demo/04-test"],
+                ["gh", "api", f"repos/safelibs/port-demo/git/tags/{tag_sha}"],
+            ],
+        )
+
+    def test_download_release_artifacts_uses_ref_commit_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact_root = Path(tmp) / "artifacts"
+            artifact_name = "demo_1.0_amd64.deb"
+
+            def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                self.assertEqual(args[:3], ["gh", "release", "download"])
+                self.assertIn("build-0123456789ab", args)
+                self.assertIn("--pattern", args)
+                self.assertIn("*.deb", args)
+                output_dir = Path(args[args.index("--dir") + 1])
+                output_dir.mkdir(parents=True, exist_ok=True)
+                (output_dir / artifact_name).write_text("deb")
+                return completed()
+
+            with (
+                mock.patch("tools.build_site.shutil.which", return_value="/usr/bin/gh"),
+                mock.patch(
+                    "tools.build_site.resolve_ref_commit",
+                    return_value="0123456789abcdef0123456789abcdef01234567",
+                ) as resolve_mock,
+                mock.patch("tools.build_site.run", side_effect=fake_run) as run_mock,
+            ):
+                artifacts = build_site.download_release_artifacts(
+                    repo_config("demo"),
+                    artifact_root,
+                )
+
+            resolve_mock.assert_called_once_with("safelibs/port-demo", "refs/tags/demo/04-test")
+            run_mock.assert_called_once()
+            self.assertEqual([path.name for path in artifacts], [artifact_name])
+            self.assertTrue((artifact_root / "demo" / artifact_name).exists())
+
+    def test_download_release_artifacts_requires_downloaded_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact_root = Path(tmp) / "artifacts"
+
+            with (
+                mock.patch("tools.build_site.shutil.which", return_value="/usr/bin/gh"),
+                mock.patch(
+                    "tools.build_site.resolve_ref_commit",
+                    return_value="0123456789abcdef0123456789abcdef01234567",
+                ),
+                mock.patch("tools.build_site.run", return_value=completed()),
+            ):
+                with self.assertRaisesRegex(build_site.BuildError, "no release artifacts found"):
+                    build_site.download_release_artifacts(repo_config("demo"), artifact_root)
+
     def test_resolve_testing_repositories_discovers_ports_and_applies_overrides(self) -> None:
         github_output = json.dumps(
             [
@@ -1190,14 +1289,12 @@ class BuildSiteTests(unittest.TestCase):
                 mock.patch("tools.build_site.parse_args", return_value=args),
                 mock.patch("tools.build_site.load_config", return_value=config),
                 mock.patch("tools.build_site.generate_split_site") as generate_mock,
-                mock.patch("tools.build_site.sync_repo") as sync_mock,
-                mock.patch("tools.build_site.build_repo") as build_mock,
+                mock.patch("tools.build_site.download_release_artifacts") as download_mock,
             ):
                 result = build_site.main()
 
         self.assertEqual(result, 0)
-        sync_mock.assert_not_called()
-        build_mock.assert_not_called()
+        download_mock.assert_not_called()
         self.assertEqual(
             generate_mock.call_args.args[1],
             {"alpha": [artifact_a]},
@@ -1310,7 +1407,7 @@ class BuildSiteTests(unittest.TestCase):
                 ],
             )
 
-    def test_main_build_flow_syncs_and_builds_repositories(self) -> None:
+    def test_main_build_flow_downloads_release_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             workspace = tmp_path / "workspace"
@@ -1329,8 +1426,7 @@ class BuildSiteTests(unittest.TestCase):
                 },
                 "repositories": [repo_config("alpha"), repo_config("beta")],
             }
-            source_dirs = [workspace / "sources" / "alpha", workspace / "sources" / "beta"]
-            built_artifacts = [
+            downloaded_artifacts = [
                 [workspace / "artifacts" / "alpha" / "alpha.deb"],
                 [
                     workspace / "artifacts" / "beta" / "beta-a.deb",
@@ -1341,22 +1437,23 @@ class BuildSiteTests(unittest.TestCase):
             with (
                 mock.patch("tools.build_site.parse_args", return_value=args),
                 mock.patch("tools.build_site.load_config", return_value=config),
-                mock.patch("tools.build_site.sync_repo", side_effect=source_dirs) as sync_mock,
-                mock.patch("tools.build_site.build_repo", side_effect=built_artifacts) as build_mock,
+                mock.patch(
+                    "tools.build_site.download_release_artifacts",
+                    side_effect=downloaded_artifacts,
+                ) as download_mock,
                 mock.patch("tools.build_site.generate_split_site") as generate_mock,
             ):
                 result = build_site.main()
 
         self.assertEqual(result, 0)
-        self.assertEqual(sync_mock.call_count, 2)
-        self.assertEqual(build_mock.call_count, 2)
+        self.assertEqual(download_mock.call_count, 2)
         self.assertEqual(
-            [call.args[0]["name"] for call in build_mock.call_args_list],
+            [call.args[0]["name"] for call in download_mock.call_args_list],
             ["alpha", "beta"],
         )
         self.assertEqual(
-            build_mock.call_args_list[0].args[3:],
-            ("ubuntu:24.04", ["ca-certificates", "git"]),
+            [call.args[1] for call in download_mock.call_args_list],
+            [workspace / "artifacts", workspace / "artifacts"],
         )
         self.assertEqual(
             generate_mock.call_args.args[1],

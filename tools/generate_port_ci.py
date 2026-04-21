@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Generate per-port `.github/workflows/build-debs.yml` workflows.
 
-Reads repositories.yml and emits an identical-in-spirit CI workflow for each
-safelibs/port-* repository checked out on disk. The generated workflow runs
-the same docker build that apt-repo's `build_site.py::build_repo` runs, so a
-passing port CI run implies the port will also build cleanly when rolled
-into the signed apt repo.
+Reads repositories.yml and emits a CI workflow for each safelibs/port-*
+repository checked out on disk. The generated workflow builds the port debs in
+that port repository, then publishes the .deb artifacts to a per-commit GitHub
+release. apt-repo consumes those releases when assembling the signed apt repo.
 
 The workflow is gated to:
   * build on every push, pull_request, and workflow_dispatch
