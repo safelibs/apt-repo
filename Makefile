@@ -2,7 +2,7 @@ PYTHON ?= python3
 CONFIG ?= repositories.yml
 SITE_DIR ?= site
 WORK_DIR ?= .work
-BASE_URL ?= https://safelibs.github.io/apt-repo/
+BASE_URL ?= https://safelibs.github.io/apt/
 PORTS_ROOT ?= ..
 
 .PHONY: test build-site verify-docker clean generate-port-ci check-port-ci

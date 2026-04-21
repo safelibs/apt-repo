@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
-      BASE_URL: https://safelibs.github.io/apt-repo/
+      BASE_URL: https://safelibs.github.io/apt/
     steps:
       - uses: actions/checkout@v4
 

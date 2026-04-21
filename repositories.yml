@@ -4,8 +4,8 @@ archive:
   origin: SafeLibs
   label: SafeLibs
   description: Memory-safe drop-in replacements packaged by SafeLibs for Ubuntu 24.04
-  homepage: https://github.com/safelibs/apt-repo
-  base_url: https://safelibs.github.io/apt-repo/
+  homepage: https://github.com/safelibs/apt
+  base_url: https://safelibs.github.io/apt/
   key_name: safelibs
   pin_priority: 1001
   image: ubuntu:24.04

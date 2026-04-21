@@ -20,7 +20,7 @@ jobs:
       SAFEAPTREPO_GPG_PASSPHRASE: ${{ secrets.SAFEAPTREPO_GPG_PASSPHRASE }}
       SAFEDEBREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEDEBREPO_GPG_PRIVATE_KEY }}
       SAFEDEBREPO_GPG_PASSPHRASE: ${{ secrets.SAFEDEBREPO_GPG_PASSPHRASE }}
-      BASE_URL: https://safelibs.github.io/apt-repo/
+      BASE_URL: https://safelibs.github.io/apt/
     steps:
       - uses: actions/checkout@v4
 

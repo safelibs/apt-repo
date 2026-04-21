@@ -51,7 +51,7 @@ def archive_config() -> dict[str, str]:
         "label": "SafeLibs",
         "description": "Test repo for Ubuntu 24.04",
         "homepage": "https://example.invalid/project",
-        "base_url": "https://example.invalid/apt-repo/",
+        "base_url": "https://example.invalid/apt/",
         "key_name": "safelibs",
         "image": "ubuntu:24.04",
     }
@@ -1210,7 +1210,7 @@ class BuildSiteTests(unittest.TestCase):
                 output_dir,
                 repository_template_path=template_root / "index.html",
                 landing_template_path=template_root / "landing.html",
-                base_url="https://example.invalid/apt-repo/",
+                base_url="https://example.invalid/apt/",
             )
 
             self.assertEqual([repo.name for repo in published], ["all", "alpha", "beta"])
@@ -1222,9 +1222,9 @@ class BuildSiteTests(unittest.TestCase):
             self.assertTrue((output_dir / "alpha/safelibs-alpha.pref").exists())
             self.assertTrue((output_dir / "beta/safelibs-beta.pref").exists())
             root_index = (output_dir / "index.html").read_text()
-            self.assertIn("https://example.invalid/apt-repo/all", root_index)
-            self.assertIn('href="https://example.invalid/apt-repo/alpha/"', root_index)
-            self.assertIn('href="https://example.invalid/apt-repo/beta/"', root_index)
+            self.assertIn("https://example.invalid/apt/all", root_index)
+            self.assertIn('href="https://example.invalid/apt/alpha/"', root_index)
+            self.assertIn('href="https://example.invalid/apt/beta/"', root_index)
             all_packages = (output_dir / "all/dists/noble/main/binary-amd64/Packages").read_text()
             self.assertIn("Package: libalpha1", all_packages)
             self.assertIn("Package: libbeta1", all_packages)
@@ -1255,7 +1255,7 @@ class BuildSiteTests(unittest.TestCase):
                 output_dir,
                 repository_template_path=template_root / "index.html",
                 landing_template_path=template_root / "landing.html",
-                base_url="https://example.invalid/apt-repo/",
+                base_url="https://example.invalid/apt/",
                 channel_name="testing",
                 path_prefix="testing",
             )
@@ -1269,7 +1269,7 @@ class BuildSiteTests(unittest.TestCase):
             self.assertTrue((output_dir / "testing/all/safelibs-testing-all.pref").exists())
             self.assertTrue((output_dir / "testing/alpha/safelibs-testing-alpha.pref").exists())
             root_index = (output_dir / "index.html").read_text()
-            self.assertIn("https://example.invalid/apt-repo/testing/all", root_index)
+            self.assertIn("https://example.invalid/apt/testing/all", root_index)
             alpha_index = (output_dir / "testing/alpha/index.html").read_text()
             self.assertIn("safelibs-testing-alpha.pref", alpha_index)
             self.assertIn("testing/alpha", alpha_index)
@@ -1295,7 +1295,7 @@ class BuildSiteTests(unittest.TestCase):
                     name="alpha",
                     path="alpha",
                     repository_id="alpha",
-                    url="https://example.invalid/apt-repo/alpha",
+                    url="https://example.invalid/apt/alpha",
                     package_infos=(package_info("libalpha1"),),
                 ),
                 build_site.PublishedRepository(
@@ -1303,7 +1303,7 @@ class BuildSiteTests(unittest.TestCase):
                     name="all",
                     path="testing/all",
                     repository_id="testing-all",
-                    url="https://example.invalid/apt-repo/testing/all",
+                    url="https://example.invalid/apt/testing/all",
                     package_infos=(package_info("libalpha1"), package_info("libbeta1")),
                 ),
                 build_site.PublishedRepository(
@@ -1311,7 +1311,7 @@ class BuildSiteTests(unittest.TestCase):
                     name="all",
                     path="all",
                     repository_id="all",
-                    url="https://example.invalid/apt-repo/all",
+                    url="https://example.invalid/apt/all",
                     package_infos=(package_info("libalpha1"),),
                 ),
                 build_site.PublishedRepository(
@@ -1319,7 +1319,7 @@ class BuildSiteTests(unittest.TestCase):
                     name="alpha",
                     path="testing/alpha",
                     repository_id="testing-alpha",
-                    url="https://example.invalid/apt-repo/testing/alpha",
+                    url="https://example.invalid/apt/testing/alpha",
                     package_infos=(package_info("libalpha1"),),
                 ),
             ]
@@ -1330,17 +1330,17 @@ class BuildSiteTests(unittest.TestCase):
                 archive_config(),
                 repositories,
                 "A" * 40,
-                "https://example.invalid/apt-repo/",
+                "https://example.invalid/apt/",
             )
 
             root_index = (output_dir / "index.html").read_text()
 
-        stable_all_pos = root_index.index('href="https://example.invalid/apt-repo/all/"')
+        stable_all_pos = root_index.index('href="https://example.invalid/apt/all/"')
         testing_all_pos = root_index.index(
-            'href="https://example.invalid/apt-repo/testing/all/"'
+            'href="https://example.invalid/apt/testing/all/"'
         )
         directory_pos = root_index.index("Repository Directory")
-        stable_alpha_pos = root_index.index('href="https://example.invalid/apt-repo/alpha/"')
+        stable_alpha_pos = root_index.index('href="https://example.invalid/apt/alpha/"')
 
         self.assertLess(stable_all_pos, testing_all_pos)
         self.assertLess(testing_all_pos, directory_pos)
@@ -1364,7 +1364,7 @@ class BuildSiteTests(unittest.TestCase):
                     tmp_path / "site",
                     repository_template_path=template_root / "index.html",
                     landing_template_path=template_root / "landing.html",
-                    base_url="https://example.invalid/apt-repo/",
+                    base_url="https://example.invalid/apt/",
                 )
 
     def test_generate_split_site_rejects_unconfigured_repository_artifacts(self) -> None:
@@ -1387,7 +1387,7 @@ class BuildSiteTests(unittest.TestCase):
                     tmp_path / "site",
                     repository_template_path=template_root / "index.html",
                     landing_template_path=template_root / "landing.html",
-                    base_url="https://example.invalid/apt-repo/",
+                    base_url="https://example.invalid/apt/",
                 )
 
     def test_generate_split_site_requires_artifacts_for_all_configured_repositories(self) -> None:
@@ -1409,7 +1409,7 @@ class BuildSiteTests(unittest.TestCase):
                     tmp_path / "site",
                     repository_template_path=template_root / "index.html",
                     landing_template_path=template_root / "landing.html",
-                    base_url="https://example.invalid/apt-repo/",
+                    base_url="https://example.invalid/apt/",
                 )
 
     def test_split_stanzas_discards_empty_chunks(self) -> None:
@@ -1453,7 +1453,7 @@ class BuildSiteTests(unittest.TestCase):
             {"alpha": [artifact_a]},
         )
         self.assertEqual(
-            generate_mock.call_args.kwargs["base_url"], "https://example.invalid/apt-repo/"
+            generate_mock.call_args.kwargs["base_url"], "https://example.invalid/apt/"
         )
 
     def test_main_skip_build_requires_cached_artifacts_for_all_configured_repositories(self) -> None:
@@ -1525,7 +1525,7 @@ class BuildSiteTests(unittest.TestCase):
                 config=config_path,
                 output=output,
                 workspace=workspace,
-                base_url="https://example.invalid/apt-repo/",
+                base_url="https://example.invalid/apt/",
                 skip_build=True,
             )
 
