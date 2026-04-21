@@ -3,28 +3,30 @@
 This repository assembles and publishes the static SafeLibs apt repository for
 Ubuntu 24.04 on GitHub Pages.
 
-As of April 20, 2026, the checked-in stable channel in
-[`repositories.yml`](./repositories.yml) tracks every current
-`safelibs/port-*` repo that exposes a `04-test` tag:
+As of April 21, 2026, the checked-in stable channel in
+[`repositories.yml`](./repositories.yml) tracks the latest release-backed
+`build-<12-char-sha>` tag for each current `safelibs/port-*` repo that has
+published SafeLibs `.deb` release assets:
 
-- `safelibs/port-cjson` at `refs/tags/cjson/04-test`
-- `safelibs/port-giflib` at `refs/tags/giflib/04-test`
-- `safelibs/port-libarchive` at `refs/tags/libarchive/04-test`
-- `safelibs/port-libbz2` at `refs/tags/libbz2/04-test`
-- `safelibs/port-libcsv` at `refs/tags/libcsv/04-test`
-- `safelibs/port-libjpeg-turbo` at `refs/tags/libjpeg-turbo/04-test`
-- `safelibs/port-libjson` at `refs/tags/libjson/04-test`
-- `safelibs/port-liblzma` at `refs/tags/liblzma/04-test`
-- `safelibs/port-libpng` at `refs/tags/libpng/04-test`
-- `safelibs/port-libsdl` at `refs/tags/libsdl/04-test`
-- `safelibs/port-libsodium` at `refs/tags/libsodium/04-test`
-- `safelibs/port-libtiff` at `refs/tags/libtiff/04-test`
-- `safelibs/port-libuv` at `refs/tags/libuv/04-test`
-- `safelibs/port-libvips` at `refs/tags/libvips/04-test`
-- `safelibs/port-libwebp` at `refs/tags/libwebp/04-test`
-- `safelibs/port-libxml` at `refs/tags/libxml/04-test`
-- `safelibs/port-libyaml` at `refs/tags/libyaml/04-test`
-- `safelibs/port-libzstd` at `refs/tags/libzstd/04-test`
+- `safelibs/port-cjson` at `refs/tags/build-de29489668c1`
+- `safelibs/port-giflib` at `refs/tags/build-8dd3019a8e99`
+- `safelibs/port-libarchive` at `refs/tags/build-95a312cfb18f`
+- `safelibs/port-libbz2` at `refs/tags/build-8c4b1bee6d25`
+- `safelibs/port-libcsv` at `refs/tags/build-91e798441fdd`
+- `safelibs/port-libexif` at `refs/tags/build-9f7fcf07e370`
+- `safelibs/port-libjansson` at `refs/tags/build-32501acfb67e`
+- `safelibs/port-libjpeg-turbo` at `refs/tags/build-27e232c22936`
+- `safelibs/port-libjson` at `refs/tags/build-e25f4b433d01`
+- `safelibs/port-liblzma` at `refs/tags/build-ebba850f8fae`
+- `safelibs/port-libpng` at `refs/tags/build-57fa3d117156`
+- `safelibs/port-libsdl` at `refs/tags/build-14609a9a5844`
+- `safelibs/port-libsodium` at `refs/tags/build-d1d241340f2e`
+- `safelibs/port-libtiff` at `refs/tags/build-9e34df3e07fc`
+- `safelibs/port-libvips` at `refs/tags/build-12543f951c24`
+- `safelibs/port-libwebp` at `refs/tags/build-d9437d8e3c87`
+- `safelibs/port-libxml` at `refs/tags/build-8af9d2976d24`
+- `safelibs/port-libyaml` at `refs/tags/build-17f439b2dab0`
+- `safelibs/port-libzstd` at `refs/tags/build-64056ff8056f`
 
 The testing channel is discovered at build time from non-archived
 `safelibs/port-*` repos. It resolves each repo's current default branch and
@@ -104,10 +106,11 @@ make verify-docker
 ```
 
 `make verify-docker` verifies the explicit stable `/all/` repository, each
-stable per-library repository, and any generated testing repositories. When a
-manifest entry omits
-`verify_packages`, the verification script derives the package set directly
-from the published `Packages` index for that repository.
+stable per-library repository, and any generated testing repositories. The
+`/all/` repository uses each entry's `verify_all_packages` when present, then
+falls back to `verify_packages`. When a manifest entry omits configured verify
+packages, the verification script derives the package set directly from the
+published `Packages` index for that repository.
 
 The site output lands in `site/`, with installable repositories under
 `site/all/`, `site/<library>/`, `site/testing/all/`, and

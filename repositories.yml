@@ -45,12 +45,18 @@ testing:
       build:
         mode: docker
         workdir: .
-        rustup_toolchain: stable
         packages:
+          - autoconf
+          - automake
           - build-essential
+          - cargo
           - dpkg-dev
+          - libtool
+          - pkg-config
+          - rustc
         command: |
-          safe/scripts/build-deb.sh
+          bash safe/scripts/build-deb.sh
+          mkdir -p "$SAFEAPTREPO_OUTPUT"
           cp -v safe/dist/*.deb "$SAFEAPTREPO_OUTPUT"/
         artifact_globs:
           - "*.deb"
@@ -58,7 +64,9 @@ testing:
 repositories:
   - name: cjson
     github_repo: safelibs/port-cjson
-    ref: refs/tags/cjson/04-test
+    ref: refs/tags/build-de29489668c1
+    verify_packages:
+      - libcjson1
     build:
       mode: safe-debian
       artifact_globs:
@@ -66,7 +74,9 @@ repositories:
 
   - name: giflib
     github_repo: safelibs/port-giflib
-    ref: refs/tags/giflib/04-test
+    ref: refs/tags/build-8dd3019a8e99
+    verify_packages:
+      - libgif7
     build:
       mode: safe-debian
       artifact_globs:
@@ -74,7 +84,9 @@ repositories:
 
   - name: libarchive
     github_repo: safelibs/port-libarchive
-    ref: refs/tags/libarchive/04-test
+    ref: refs/tags/build-95a312cfb18f
+    verify_packages:
+      - libarchive13t64
     build:
       mode: safe-debian
       packages:
@@ -105,7 +117,9 @@ repositories:
 
   - name: libbz2
     github_repo: safelibs/port-libbz2
-    ref: refs/tags/libbz2/04-test
+    ref: refs/tags/build-8c4b1bee6d25
+    verify_packages:
+      - libbz2-1.0
     build:
       mode: safe-debian
       setup: |
@@ -149,7 +163,9 @@ repositories:
 
   - name: libcsv
     github_repo: safelibs/port-libcsv
-    ref: refs/tags/libcsv/04-test
+    ref: refs/tags/build-91e798441fdd
+    verify_packages:
+      - libcsv3
     build:
       mode: checkout-artifacts
       workdir: .
@@ -158,7 +174,9 @@ repositories:
 
   - name: libexif
     github_repo: safelibs/port-libexif
-    ref: refs/tags/libexif/04-test
+    ref: refs/tags/build-9f7fcf07e370
+    verify_packages:
+      - libexif12
     build:
       mode: safe-debian
       artifact_globs:
@@ -166,23 +184,34 @@ repositories:
 
   - name: libjansson
     github_repo: safelibs/port-libjansson
-    ref: refs/tags/libjansson/04-test
+    ref: refs/tags/build-32501acfb67e
+    verify_packages:
+      - libjansson4
     build:
       mode: docker
       workdir: .
-      rustup_toolchain: stable
       packages:
+        - autoconf
+        - automake
         - build-essential
+        - cargo
         - dpkg-dev
+        - libtool
+        - pkg-config
+        - rustc
       command: |
-        safe/scripts/build-deb.sh
+        bash safe/scripts/build-deb.sh
+        mkdir -p "$SAFEAPTREPO_OUTPUT"
         cp -v safe/dist/*.deb "$SAFEAPTREPO_OUTPUT"/
       artifact_globs:
         - "*.deb"
 
   - name: libjpeg-turbo
     github_repo: safelibs/port-libjpeg-turbo
-    ref: refs/tags/libjpeg-turbo/04-test
+    ref: refs/tags/build-27e232c22936
+    verify_packages:
+      - libjpeg-turbo8
+      - libturbojpeg
     build:
       mode: safe-debian
       artifact_globs:
@@ -190,10 +219,9 @@ repositories:
 
   - name: libjson
     github_repo: safelibs/port-libjson
-    ref: refs/tags/libjson/04-test
+    ref: refs/tags/build-e25f4b433d01
     verify_packages:
       - libjson-c5
-      - libjson-c-dev
     build:
       workdir: .
       packages:
@@ -214,7 +242,9 @@ repositories:
 
   - name: liblzma
     github_repo: safelibs/port-liblzma
-    ref: refs/tags/liblzma/04-test
+    ref: refs/tags/build-ebba850f8fae
+    verify_packages:
+      - liblzma5
     build:
       mode: safe-debian
       setup: |
@@ -234,11 +264,9 @@ repositories:
 
   - name: libpng
     github_repo: safelibs/port-libpng
-    ref: refs/tags/libpng/04-test
+    ref: refs/tags/build-57fa3d117156
     verify_packages:
       - libpng16-16t64
-      - libpng-dev
-      - libpng-tools
     build:
       mode: checkout-artifacts
       workdir: .
@@ -247,7 +275,9 @@ repositories:
 
   - name: libsdl
     github_repo: safelibs/port-libsdl
-    ref: refs/tags/libsdl/04-test
+    ref: refs/tags/build-14609a9a5844
+    verify_packages:
+      - libsdl2-2.0-0
     build:
       mode: safe-debian
       artifact_globs:
@@ -255,7 +285,9 @@ repositories:
 
   - name: libsodium
     github_repo: safelibs/port-libsodium
-    ref: refs/tags/libsodium/04-test
+    ref: refs/tags/build-d1d241340f2e
+    verify_packages:
+      - libsodium23
     build:
       mode: safe-debian
       packages:
@@ -277,7 +309,9 @@ repositories:
 
   - name: libtiff
     github_repo: safelibs/port-libtiff
-    ref: refs/tags/libtiff/04-test
+    ref: refs/tags/build-9e34df3e07fc
+    verify_packages:
+      - libtiff6
     build:
       mode: safe-debian
       rustup_toolchain: stable-x86_64-unknown-linux-gnu
@@ -301,38 +335,13 @@ repositories:
       artifact_globs:
         - "*.deb"
 
-  - name: libuv
-    github_repo: safelibs/port-libuv
-    ref: refs/tags/libuv/04-test
-    build:
-      mode: safe-debian
-      setup: |
-        python3 - <<'PY'
-        from pathlib import Path
-
-        replacements = {
-            Path(".cargo/config.toml"): {
-                "/home/yans/safelibs/port-libuv/safe/tools/cc-linker.sh": "/workspace/source/safe/tools/cc-linker.sh",
-            },
-            Path("safe/tools/cc-linker.sh"): {
-                "/home/yans/safelibs/port-libuv/safe/tools/abi-baseline.json": "/workspace/source/safe/tools/abi-baseline.json",
-            },
-        }
-
-        for path, path_replacements in replacements.items():
-            text = path.read_text()
-            for old, new in path_replacements.items():
-                if old not in text:
-                    raise SystemExit(f"missing expected path in {path}: {old}")
-                text = text.replace(old, new)
-            path.write_text(text)
-        PY
-      artifact_globs:
-        - "*.deb"
-
   - name: libvips
     github_repo: safelibs/port-libvips
-    ref: refs/tags/libvips/04-test
+    ref: refs/tags/build-12543f951c24
+    verify_packages:
+      - libvips42t64
+    verify_all_packages:
+      - libvips-doc
     build:
       mode: docker
       workdir: .
@@ -362,7 +371,9 @@ repositories:
 
   - name: libwebp
     github_repo: safelibs/port-libwebp
-    ref: refs/tags/libwebp/04-test
+    ref: refs/tags/build-d9437d8e3c87
+    verify_packages:
+      - libwebp7
     build:
       mode: safe-debian
       artifact_globs:
@@ -370,7 +381,9 @@ repositories:
 
   - name: libxml
     github_repo: safelibs/port-libxml
-    ref: refs/tags/libxml/04-test
+    ref: refs/tags/build-8af9d2976d24
+    verify_packages:
+      - libxml2
     build:
       mode: safe-debian
       artifact_globs:
@@ -378,7 +391,9 @@ repositories:
 
   - name: libyaml
     github_repo: safelibs/port-libyaml
-    ref: refs/tags/libyaml/04-test
+    ref: refs/tags/build-17f439b2dab0
+    verify_packages:
+      - libyaml-0-2
     build:
       mode: safe-debian
       artifact_globs:
@@ -386,11 +401,9 @@ repositories:
 
   - name: libzstd
     github_repo: safelibs/port-libzstd
-    ref: refs/tags/libzstd/04-test
+    ref: refs/tags/build-64056ff8056f
     verify_packages:
       - libzstd1
-      - libzstd-dev
-      - zstd
     build:
       workdir: .
       rustup_toolchain: 1.94.0

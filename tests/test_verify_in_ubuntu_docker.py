@@ -84,6 +84,31 @@ def write_mixed_verify_config(path: Path) -> None:
     )
 
 
+def write_aggregate_override_config(path: Path) -> None:
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "archive": {
+                    "suite": "noble",
+                    "component": "main",
+                    "key_name": "safelibs",
+                },
+                "repositories": [
+                    {
+                        "name": "runtime-heavy",
+                        "verify_packages": ["runtime-pkg"],
+                        "verify_all_packages": ["doc-pkg"],
+                    },
+                    {
+                        "name": "regular",
+                        "verify_packages": ["regular-pkg"],
+                    },
+                ],
+            }
+        )
+    )
+
+
 def write_fake_docker(path: Path) -> None:
     path.write_text(
         """#!/usr/bin/env python3
@@ -336,6 +361,55 @@ class VerifyInUbuntuDockerTests(unittest.TestCase):
                 "safelibs-testing-demo.pref",
             )
 
+    def test_local_testing_path_uses_configured_packages_when_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_path = tmp_path / "repositories.yml"
+            capture_path = tmp_path / "docker-args.json"
+            bin_dir = tmp_path / "bin"
+            docker_path = bin_dir / "docker"
+            repo_dir = tmp_path / "site" / "testing" / "demo"
+
+            write_verify_config(config_path)
+            bin_dir.mkdir()
+            repo_dir.mkdir(parents=True)
+            write_fake_docker(docker_path)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}:{env['PATH']}"
+            env["DOCKER_ARGS_CAPTURE"] = str(capture_path)
+
+            subprocess.run(
+                [
+                    "bash",
+                    str(SCRIPT_PATH),
+                    str(tmp_path / "site"),
+                    str(config_path),
+                    "demo",
+                    "testing/demo",
+                ],
+                check=True,
+                cwd=REPO_ROOT,
+                env=env,
+            )
+
+            docker_args = json.loads(capture_path.read_text())
+            docker_env: dict[str, str] = {}
+            idx = 0
+            while idx < len(docker_args):
+                if docker_args[idx] == "-e":
+                    name, value = docker_args[idx + 1].split("=", 1)
+                    docker_env[name] = value
+                    idx += 2
+                    continue
+                idx += 1
+
+            self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PACKAGES"], "libjson-c5")
+            self.assertEqual(
+                docker_env["SAFEAPTREPO_VERIFY_PREFERENCE_FILE"],
+                "safelibs-testing-demo.pref",
+            )
+
     def test_all_repository_falls_back_to_packages_index_when_any_repo_is_implicit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -403,6 +477,49 @@ class VerifyInUbuntuDockerTests(unittest.TestCase):
             self.assertEqual(
                 docker_env["SAFEAPTREPO_VERIFY_PACKAGES"],
                 "explicit-pkg,implicit-pkg,implicit-doc",
+            )
+            self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_REPO_URI"], "file:///repo")
+            self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PREFERENCE_FILE"], "safelibs-all.pref")
+
+    def test_all_repository_uses_aggregate_package_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_path = tmp_path / "repositories.yml"
+            capture_path = tmp_path / "docker-args.json"
+            bin_dir = tmp_path / "bin"
+            docker_path = bin_dir / "docker"
+            repo_dir = tmp_path / "site" / "all"
+
+            write_aggregate_override_config(config_path)
+            bin_dir.mkdir()
+            repo_dir.mkdir(parents=True)
+            write_fake_docker(docker_path)
+
+            env = os.environ.copy()
+            env["PATH"] = f"{bin_dir}:{env['PATH']}"
+            env["DOCKER_ARGS_CAPTURE"] = str(capture_path)
+
+            subprocess.run(
+                ["bash", str(SCRIPT_PATH), str(tmp_path / "site"), str(config_path), "all"],
+                check=True,
+                cwd=REPO_ROOT,
+                env=env,
+            )
+
+            docker_args = json.loads(capture_path.read_text())
+            docker_env: dict[str, str] = {}
+            idx = 0
+            while idx < len(docker_args):
+                if docker_args[idx] == "-e":
+                    name, value = docker_args[idx + 1].split("=", 1)
+                    docker_env[name] = value
+                    idx += 2
+                    continue
+                idx += 1
+
+            self.assertEqual(
+                docker_env["SAFEAPTREPO_VERIFY_PACKAGES"],
+                "doc-pkg,regular-pkg",
             )
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_REPO_URI"], "file:///repo")
             self.assertEqual(docker_env["SAFEAPTREPO_VERIFY_PREFERENCE_FILE"], "safelibs-all.pref")

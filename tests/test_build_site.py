@@ -346,7 +346,6 @@ class BuildSiteTests(unittest.TestCase):
                 "libsdl",
                 "libsodium",
                 "libtiff",
-                "libuv",
                 "libvips",
                 "libwebp",
                 "libxml",
@@ -354,31 +353,49 @@ class BuildSiteTests(unittest.TestCase):
                 "libzstd",
             ],
         )
-        self.assertEqual(loaded["repositories"][0]["build"]["mode"], "safe-debian")
+        repositories_by_name = {entry["name"]: entry for entry in loaded["repositories"]}
+        self.assertEqual(repositories_by_name["cjson"]["ref"], "refs/tags/build-de29489668c1")
+        self.assertEqual(repositories_by_name["cjson"]["build"]["mode"], "safe-debian")
+        verify_packages_by_name = {
+            entry["name"]: entry["verify_packages"]
+            for entry in loaded["repositories"]
+            if "verify_packages" in entry
+        }
+        self.assertEqual(set(verify_packages_by_name), set(repositories_by_name))
         self.assertEqual(
-            {
-                entry["name"]: entry["verify_packages"]
-                for entry in loaded["repositories"]
-                if "verify_packages" in entry
-            },
-            {
-                "libjson": ["libjson-c5", "libjson-c-dev"],
-                "libpng": ["libpng16-16t64", "libpng-dev", "libpng-tools"],
-                "libzstd": ["libzstd1", "libzstd-dev", "zstd"],
-            },
+            verify_packages_by_name["libjpeg-turbo"],
+            ["libjpeg-turbo8", "libturbojpeg"],
         )
-        self.assertEqual(loaded["repositories"][4]["build"]["mode"], "checkout-artifacts")
-        self.assertNotIn("command", loaded["repositories"][4]["build"])
-        self.assertEqual(loaded["repositories"][10]["build"]["mode"], "checkout-artifacts")
-        self.assertNotIn("command", loaded["repositories"][10]["build"])
-        self.assertIn("/workspace/source/safe/tools/cc-linker.sh", loaded["repositories"][14]["build"]["setup"])
-        self.assertIn("/workspace/source/safe/tools/abi-baseline.json", loaded["repositories"][14]["build"]["setup"])
-        self.assertEqual(loaded["repositories"][15]["build"]["mode"], "docker")
-        self.assertIn("build-check-install", loaded["repositories"][15]["build"]["command"])
-        self.assertIn("dpkg-architecture -qDEB_HOST_MULTIARCH", loaded["repositories"][15]["build"]["command"])
-        self.assertIn('cp -a build-check-install/lib/"$(dpkg-architecture -qDEB_HOST_MULTIARCH)"/libvips*.so*', loaded["repositories"][15]["build"]["command"])
-        self.assertIn("DEB_BUILD_OPTIONS", loaded["repositories"][15]["build"]["command"])
-        self.assertIn("nocheck", loaded["repositories"][15]["build"]["command"])
+        self.assertEqual(
+            verify_packages_by_name["libjson"],
+            ["libjson-c5"],
+        )
+        self.assertEqual(
+            verify_packages_by_name["libpng"],
+            ["libpng16-16t64"],
+        )
+        self.assertEqual(
+            verify_packages_by_name["libzstd"],
+            ["libzstd1"],
+        )
+        self.assertEqual(repositories_by_name["libvips"]["verify_packages"], ["libvips42t64"])
+        self.assertEqual(repositories_by_name["libvips"]["verify_all_packages"], ["libvips-doc"])
+        self.assertEqual(repositories_by_name["libcsv"]["build"]["mode"], "checkout-artifacts")
+        self.assertNotIn("command", repositories_by_name["libcsv"]["build"])
+        self.assertEqual(repositories_by_name["libpng"]["build"]["mode"], "checkout-artifacts")
+        self.assertNotIn("command", repositories_by_name["libpng"]["build"])
+        self.assertEqual(repositories_by_name["libvips"]["build"]["mode"], "docker")
+        self.assertIn("build-check-install", repositories_by_name["libvips"]["build"]["command"])
+        self.assertIn(
+            "dpkg-architecture -qDEB_HOST_MULTIARCH",
+            repositories_by_name["libvips"]["build"]["command"],
+        )
+        self.assertIn(
+            'cp -a build-check-install/lib/"$(dpkg-architecture -qDEB_HOST_MULTIARCH)"/libvips*.so*',
+            repositories_by_name["libvips"]["build"]["command"],
+        )
+        self.assertIn("DEB_BUILD_OPTIONS", repositories_by_name["libvips"]["build"]["command"])
+        self.assertIn("nocheck", repositories_by_name["libvips"]["build"]["command"])
         self.assertEqual(loaded["testing"]["discover"]["github_org"], "safelibs")
         self.assertTrue(loaded["testing"]["allow_build_failures"])
         self.assertEqual(loaded["testing"]["default_build"]["mode"], "safe-debian")

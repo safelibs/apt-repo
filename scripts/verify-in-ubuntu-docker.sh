@@ -18,13 +18,12 @@ config = yaml.safe_load(Path(sys.argv[1]).read_text())
 archive = config["archive"]
 repository_name = sys.argv[2]
 repository_path = sys.argv[3]
-if repository_path.startswith("testing/"):
-    packages = []
-elif repository_name == "all":
+repositories = config["repositories"]
+if repository_name == "all":
     packages = []
     packages_complete = True
-    for entry in config["repositories"]:
-        verify_packages = entry.get("verify_packages", [])
+    for entry in repositories:
+        verify_packages = entry.get("verify_all_packages", entry.get("verify_packages", []))
         if verify_packages:
             packages.extend(verify_packages)
             continue
@@ -33,12 +32,15 @@ elif repository_name == "all":
         packages = []
 else:
     entry = next(
-        (candidate for candidate in config["repositories"] if candidate["name"] == repository_name),
+        (candidate for candidate in repositories if candidate["name"] == repository_name),
         None,
     )
     if entry is None:
-        raise SystemExit(f"unknown repository for verification: {repository_name}")
-    packages = list(entry.get("verify_packages", []))
+        if not repository_path.startswith("testing/"):
+            raise SystemExit(f"unknown repository for verification: {repository_name}")
+        packages = []
+    else:
+        packages = list(entry.get("verify_packages", []))
 packages = list(dict.fromkeys(packages))
 print(
     "\t".join(
