@@ -141,6 +141,34 @@ echo "deb [signed-by=/etc/apt/keyrings/safelibs.gpg] https://safelibs.github.io/
 sudo apt-get update
 ```
 
+## Pinning
+
+The shipped `safelibs.pref` (or `safelibs-<repo>.pref`) installs an apt
+preference of the form:
+
+```
+Package: <every package published by this repository>
+Pin: release o=SafeLibs
+Pin-Priority: 1001
+```
+
+Because the priority is `1001` (greater than `1000`), apt will prefer the
+SafeLibs build for every listed package over the Ubuntu archive copy, even
+when Ubuntu later ships a newer upstream version. This is what stops `apt
+upgrade` or `apt install <something-that-depends-on-libfoo>` from silently
+replacing a SafeLibs-installed library with the upstream Ubuntu package.
+
+This is a *channel* pin, not a *version* pin: the rule matches anything
+served from `o=SafeLibs`, so newer SafeLibs builds for the same package
+remain upgrade candidates and `apt upgrade` will pull them in on the next
+run. The Ubuntu copy stays out regardless of how its version number
+compares, and SafeLibs releases continue to flow through normally.
+
+If you ever remove `safelibs.pref` (or the SafeLibs source list), the next
+`apt upgrade` is free to reinstall the Ubuntu version over the SafeLibs
+build, so keep both files in place for as long as you want SafeLibs
+packages to win.
+
 ## Signing
 
 `tools/build_site.py` accepts the signing key from the environment:
