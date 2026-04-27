@@ -82,6 +82,7 @@ jobs:
   verify-local:
     needs: build
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -126,6 +127,7 @@ jobs:
       - build
       - deploy
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
