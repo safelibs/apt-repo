@@ -18,7 +18,11 @@ config = yaml.safe_load(Path(sys.argv[1]).read_text())
 archive = config["archive"]
 repository_name = sys.argv[2]
 repository_path = sys.argv[3]
-repositories = config["repositories"]
+# repositories.yml no longer carries a static repositories: list in production
+# (the stable channel is derived dynamically from the validator). If the
+# field is present (test fixtures, transitional configs), still honor it so
+# pre-supplied verify_packages flow through.
+repositories = config.get("repositories") or []
 if repository_name == "all":
     packages = []
     packages_complete = True
@@ -36,8 +40,6 @@ else:
         None,
     )
     if entry is None:
-        if not repository_path.startswith("testing/"):
-            raise SystemExit(f"unknown repository for verification: {repository_name}")
         packages = []
     else:
         packages = list(entry.get("verify_packages", []))
