@@ -76,6 +76,8 @@ class PublishedRepository:
     repository_id: str
     url: str
     package_infos: tuple[PackageInfo, ...]
+    verify_packages: tuple[str, ...] = ()
+    verify_all_packages: tuple[str, ...] = ()
 
 
 def run(
@@ -1327,6 +1329,8 @@ def write_manifest(
                     {"name": info.name, "version": info.version, "architecture": info.architecture}
                     for info in sorted(repo.package_infos, key=lambda item: item.name)
                 ],
+                "verify_packages": list(repo.verify_packages),
+                "verify_all_packages": list(repo.verify_all_packages),
             }
         )
 
@@ -1444,6 +1448,18 @@ def generate_split_site(
     aggregate_path = repository_path(path_prefix, ALL_REPOSITORY_NAME)
     aggregate_id = repository_id(path_prefix, ALL_REPOSITORY_NAME)
 
+    entries_by_name = {str(entry["name"]): entry for entry in config["repositories"]}
+    aggregate_verify_packages: list[str] = []
+    aggregate_verify_all_packages: list[str] = []
+    for repository_name in repository_names:
+        entry = entries_by_name.get(repository_name) or {}
+        for package in entry.get("verify_packages") or []:
+            if package not in aggregate_verify_packages:
+                aggregate_verify_packages.append(package)
+        for package in entry.get("verify_all_packages") or []:
+            if package not in aggregate_verify_all_packages:
+                aggregate_verify_all_packages.append(package)
+
     published_repositories = [
         PublishedRepository(
             channel=channel_name,
@@ -1465,12 +1481,15 @@ def generate_split_site(
                     signing_key=resolved_signing_key,
                 )
             ),
+            verify_packages=tuple(aggregate_verify_packages),
+            verify_all_packages=tuple(aggregate_verify_all_packages),
         )
     ]
 
     for repository_name in repository_names:
         repo_path = repository_path(path_prefix, repository_name)
         repo_id = repository_id(path_prefix, repository_name)
+        entry = entries_by_name.get(repository_name) or {}
         published_repositories.append(
             PublishedRepository(
                 channel=channel_name,
@@ -1492,6 +1511,8 @@ def generate_split_site(
                         signing_key=resolved_signing_key,
                     )
                 ),
+                verify_packages=tuple(entry.get("verify_packages") or []),
+                verify_all_packages=tuple(entry.get("verify_all_packages") or []),
             )
         )
 

@@ -9,40 +9,80 @@ REPOSITORY_NAME=${3:-all}
 REPOSITORY_PATH=${4:-"$REPOSITORY_NAME"}
 
 IFS=$'\t' read -r suite component key_name packages_csv <<EOF
-$(python3 - "$CONFIG_PATH" "$REPOSITORY_NAME" "$REPOSITORY_PATH" <<'PY'
+$(python3 - "$CONFIG_PATH" "$REPOSITORY_NAME" "$REPOSITORY_PATH" "${REPO_TARGET}" <<'PY'
+import json
 from pathlib import Path
 import sys
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen
 import yaml
 
 config = yaml.safe_load(Path(sys.argv[1]).read_text())
 archive = config["archive"]
 repository_name = sys.argv[2]
 repository_path = sys.argv[3]
-# repositories.yml no longer carries a static repositories: list in production
-# (the stable channel is derived dynamically from the validator). If the
-# field is present (test fixtures, transitional configs), still honor it so
-# pre-supplied verify_packages flow through.
-repositories = config.get("repositories") or []
-if repository_name == "all":
-    packages = []
-    packages_complete = True
-    for entry in repositories:
-        verify_packages = entry.get("verify_all_packages", entry.get("verify_packages", []))
-        if verify_packages:
-            packages.extend(verify_packages)
-            continue
-        packages_complete = False
-    if not packages_complete:
-        packages = []
-else:
-    entry = next(
-        (candidate for candidate in repositories if candidate["name"] == repository_name),
-        None,
-    )
-    if entry is None:
-        packages = []
+repo_target = sys.argv[4]
+
+
+def load_manifest_entry(target: str, name: str, path: str):
+    if target.startswith(("http://", "https://")):
+        url = f"{target.rstrip('/')}/manifest.json"
+        try:
+            with urlopen(url) as response:
+                manifest = json.loads(response.read().decode())
+        except Exception:
+            return None
     else:
-        packages = list(entry.get("verify_packages", []))
+        manifest_path = Path(target) / "manifest.json"
+        if not manifest_path.exists():
+            return None
+        try:
+            manifest = json.loads(manifest_path.read_text())
+        except json.JSONDecodeError:
+            return None
+    for channel in manifest.get("channels") or []:
+        for entry in channel.get("repositories") or []:
+            if entry.get("name") == name and entry.get("path") == path:
+                return entry
+    return None
+
+
+entry = load_manifest_entry(repo_target, repository_name, repository_path)
+if entry is None:
+    packages: list[str] = []
+elif repository_name == "all":
+    packages = list(entry.get("verify_all_packages") or [])
+else:
+    packages = list(entry.get("verify_packages") or [])
+# repositories.yml no longer carries a static repositories: list in production,
+# but legacy test fixtures may still supply one. Honor it as a fallback so
+# pre-supplied verify packages still flow through. If any entry is implicit
+# (no packages defined), drop the whole list and let the downstream fall
+# back to deriving the package list from the published Packages index.
+if not packages:
+    repositories = config.get("repositories") or []
+    if repositories and repository_name == "all":
+        legacy_packages: list[str] = []
+        legacy_complete = True
+        for legacy_entry in repositories:
+            entry_packages = (
+                legacy_entry.get("verify_all_packages")
+                or legacy_entry.get("verify_packages")
+                or []
+            )
+            if entry_packages:
+                legacy_packages.extend(entry_packages)
+            else:
+                legacy_complete = False
+        if legacy_complete:
+            packages = legacy_packages
+    elif repositories:
+        legacy_entry = next(
+            (candidate for candidate in repositories if candidate.get("name") == repository_name),
+            None,
+        )
+        if legacy_entry is not None:
+            packages = list(legacy_entry.get("verify_packages") or [])
 packages = list(dict.fromkeys(packages))
 print(
     "\t".join(
@@ -50,7 +90,7 @@ print(
             str(archive["suite"]),
             str(archive["component"]),
             str(archive["key_name"]),
-            ",".join(dict.fromkeys(packages)),
+            ",".join(packages),
         ]
     )
 )
