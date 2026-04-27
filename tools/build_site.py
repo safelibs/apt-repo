@@ -346,17 +346,34 @@ def synthesize_repository_entries(
             else f"refs/tags/{port_release_tag}"
         )
 
-        verify_packages = list(library_entry.get("apt_packages") or [])
-        if not verify_packages:
-            raise BuildError(f"validator entry for {name!r} has no apt_packages")
-        verify_all_packages = list(library_entry.get("runtime_packages") or [])
+        port_debs = library_entry.get("port_debs") or []
+        ported_packages: list[str] = []
+        for deb in port_debs:
+            if not isinstance(deb, dict):
+                continue
+            package = str(deb.get("package") or "").strip()
+            if package and package not in ported_packages:
+                ported_packages.append(package)
+        if not ported_packages:
+            raise BuildError(
+                f"validator entry for {name!r} has no port_debs; "
+                "every validating port must publish at least one .deb"
+            )
+        verify_packages = ported_packages
+        validator_runtime = library_entry.get("runtime_packages") or []
+        if validator_runtime:
+            verify_all_packages = [
+                package for package in validator_runtime if package in verify_packages
+            ]
+        else:
+            verify_all_packages = []
         if not verify_all_packages:
             verify_all_packages = runtime_packages_from_apt_packages(verify_packages)
         if not verify_all_packages:
             raise BuildError(
                 f"validator entry for {name!r} has no runtime library packages; "
-                "neither validator runtime_packages nor the apt_packages list "
-                "yields a non-empty runtime subset"
+                "neither validator runtime_packages nor port_debs yields a non-empty "
+                "runtime subset"
             )
 
         entry: dict[str, Any] = {

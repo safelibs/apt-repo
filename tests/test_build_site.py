@@ -321,6 +321,10 @@ class BuildSiteTests(unittest.TestCase):
                             "port_repository": "safelibs/port-alpha",
                             "port_tag_ref": "refs/tags/alpha/04-test",
                             "port_release_tag": "build-alpha1234",
+                            "port_debs": [
+                                {"package": "libalpha1"},
+                                {"package": "libalpha-dev"},
+                            ],
                         },
                         {
                             "library": "beta",
@@ -330,6 +334,7 @@ class BuildSiteTests(unittest.TestCase):
                             "port_repository": "safelibs/port-beta",
                             "port_tag_ref": "refs/tags/beta/04-test",
                             "port_release_tag": "build-beta1234",
+                            "port_debs": [{"package": "libbeta1"}],
                         },
                         {
                             "library": "gamma",
@@ -339,6 +344,7 @@ class BuildSiteTests(unittest.TestCase):
                             "port_repository": "safelibs/port-gamma",
                             "port_tag_ref": "refs/tags/gamma/04-test",
                             "port_release_tag": "build-gamma1234",
+                            "port_debs": [{"package": "libgamma1"}],
                         },
                     ],
                 }
@@ -371,6 +377,7 @@ class BuildSiteTests(unittest.TestCase):
                             "port_repository": "safelibs/port-alpha",
                             "port_tag_ref": "refs/tags/alpha/04-test",
                             "port_release_tag": "build-alpha1234",
+                            "port_debs": [{"package": "libalpha1"}],
                         }
                     ],
                 }
@@ -409,6 +416,10 @@ class BuildSiteTests(unittest.TestCase):
                             "port_repository": "safelibs/port-alpha",
                             "port_tag_ref": "refs/tags/alpha/04-test",
                             "port_release_tag": "build-alpha1234",
+                            "port_debs": [
+                                {"package": "libalpha1"},
+                                {"package": "libalpha-dev"},
+                            ],
                         }
                     ],
                 }
@@ -433,6 +444,7 @@ class BuildSiteTests(unittest.TestCase):
                             "port_repository": "safelibs/port-alpha",
                             "port_tag_ref": "refs/tags/alpha/04-test",
                             "port_release_tag": "build-alpha1234",
+                            "port_debs": [{"package": "alpha-tools"}],
                         }
                     ],
                 }
@@ -1649,6 +1661,10 @@ class BuildSiteTests(unittest.TestCase):
                                         "port_repository": "safelibs/port-alpha",
                                         "port_tag_ref": "refs/tags/alpha/04-test",
                                         "port_release_tag": "build-alpha1234",
+                                        "port_debs": [
+                                            {"package": "libalpha1"},
+                                            {"package": "libalpha-dev"},
+                                        ],
                                     },
                                     {
                                         "library": "beta",
@@ -1662,6 +1678,7 @@ class BuildSiteTests(unittest.TestCase):
                                         "port_repository": "safelibs/port-beta",
                                         "port_tag_ref": "refs/tags/beta/04-test",
                                         "port_release_tag": "build-beta1234",
+                                        "port_debs": [{"package": "libbeta1"}],
                                     },
                                 ],
                             }
