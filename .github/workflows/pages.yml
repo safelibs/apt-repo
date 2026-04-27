@@ -16,6 +16,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      repo_specs: ${{ steps.matrix.outputs.repos }}
     env:
       GH_TOKEN: ${{ secrets.SAFELIBS_REPO_TOKEN }}
       SAFEAPTREPO_GPG_PRIVATE_KEY: ${{ secrets.SAFEAPTREPO_GPG_PRIVATE_KEY }}
@@ -46,7 +48,7 @@ jobs:
       - name: Install host dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends apt-utils gnupg python3-yaml
+          sudo apt-get install -y --no-install-recommends apt-utils gnupg jq python3-yaml
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -54,13 +56,57 @@ jobs:
       - name: Build Pages site
         run: make build-site
 
-      - name: Verify apt repo in Ubuntu 24.04 Docker
-        run: make verify-docker
+      - name: Compute verify matrix
+        id: matrix
+        run: |
+          repos=$(jq -c '[.channels[].repositories[] | {name, path}]' site/manifest.json)
+          if [[ -z "${repos}" || "${repos}" == "[]" ]]; then
+            echo "manifest.json yielded an empty repository list" >&2
+            exit 1
+          fi
+          echo "repos=${repos}" >>"${GITHUB_OUTPUT}"
+
+      - name: Upload site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apt-site
+          path: site/
+          retention-days: 1
+          include-hidden-files: false
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
+
+  verify-local:
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.build.outputs.repo_specs) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends apt-utils gnupg python3-yaml
+
+      - name: Download site artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: apt-site
+          path: site/
+
+      - name: Verify ${{ matrix.repo.name }} (${{ matrix.repo.path }}) against local site
+        run: |
+          bash scripts/verify-in-ubuntu-docker.sh \
+            "site" \
+            "repositories.yml" \
+            "${{ matrix.repo.name }}" \
+            "${{ matrix.repo.path }}"
 
   deploy:
     outputs:
@@ -69,15 +115,21 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-24.04
-    needs: build
+    needs: verify-local
     steps:
       - name: Deploy Pages
         id: deployment
         uses: actions/deploy-pages@v4
 
   verify-publication:
+    needs:
+      - build
+      - deploy
     runs-on: ubuntu-24.04
-    needs: deploy
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: ${{ fromJSON(needs.build.outputs.repo_specs) }}
     env:
       PAGE_URL: ${{ needs.deploy.outputs.page_url }}
     steps:
@@ -88,5 +140,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends python3-yaml
 
-      - name: Verify public apt repo in Ubuntu 24.04 Docker
-        run: bash scripts/verify-site.sh "${PAGE_URL}" repositories.yml
+      - name: Verify ${{ matrix.repo.name }} (${{ matrix.repo.path }}) against deployed site
+        run: |
+          bash scripts/verify-in-ubuntu-docker.sh \
+            "${PAGE_URL%/}" \
+            "repositories.yml" \
+            "${{ matrix.repo.name }}" \
+            "${{ matrix.repo.path }}"
