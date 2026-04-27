@@ -26,7 +26,7 @@ APT_REPO_ROOT = SCRIPT_DIR.parent
 if str(APT_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(APT_REPO_ROOT))
 
-from tools.build_site import detect_rust_toolchain
+from tools.build_site import detect_rust_toolchain, safe_debian_script
 
 DEFAULT_CONFIG = APT_REPO_ROOT / "repositories.yml"
 DEFAULT_PORTS_ROOT = APT_REPO_ROOT.parent
@@ -164,11 +164,7 @@ def resolve_build(
             detected = detect_rust_toolchain(port_dir / workdir)
             if detected:
                 rustup_toolchain = detected
-        inner_script = (
-            'mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control\n'
-            "dpkg-buildpackage -us -uc -b\n"
-            'cp -v ../*.deb "$SAFEAPTREPO_OUTPUT"/'
-        )
+        inner_script = safe_debian_script()
     elif mode == "docker":
         default_workdir = "."
         workdir = str(build.get("workdir") or default_workdir)

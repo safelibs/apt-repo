@@ -69,6 +69,17 @@ class RenderWorkflowTests(unittest.TestCase):
         for pkg in ["build-essential", "devscripts", "dpkg-dev", "equivs", "fakeroot"]:
             self.assertIn(pkg, inner)
 
+        # The version-rewrite preamble must run before dpkg-buildpackage so
+        # every commit produces a deb whose version is <upstream>+safelibs<epoch>,
+        # making rebuilds of new commits visible to apt as upgrades.
+        self.assertIn("dpkg-parsechangelog -S Version", inner)
+        self.assertIn("git -C \"$SAFEAPTREPO_SOURCE\" log -1 --format=%ct HEAD", inner)
+        self.assertIn("+safelibs${commit_epoch}", inner)
+        self.assertLess(
+            inner.index("mv debian/changelog.new debian/changelog"),
+            inner.index("dpkg-buildpackage -us -uc -b"),
+        )
+
         ok, err = bash_syntax_ok(inner)
         self.assertTrue(ok, err)
 

@@ -728,6 +728,24 @@ def detect_rust_toolchain(workdir: Path) -> str:
 def safe_debian_script() -> str:
     return "\n".join(
         [
+            # Rewrite debian/changelog so the deb version becomes
+            # <upstream>+safelibs<commit-epoch>. Using the commit's committer
+            # date as the suffix keeps the version deterministic per commit
+            # and monotonic across history, so apt clients reliably treat new
+            # commits as upgrades without the port maintainer having to bump
+            # the changelog.
+            'upstream_version=$(dpkg-parsechangelog -S Version | sed -E "s/\\+safelibs[0-9]+$//")',
+            'package_name=$(dpkg-parsechangelog -S Source)',
+            'distribution=$(dpkg-parsechangelog -S Distribution)',
+            'commit_epoch=$(git -C "$SAFEAPTREPO_SOURCE" log -1 --format=%ct HEAD)',
+            'new_version="${upstream_version}+safelibs${commit_epoch}"',
+            'release_date=$(date -u -R -d "@${commit_epoch}")',
+            '{',
+            '  printf "%s (%s) %s; urgency=medium\\n\\n  * Automated SafeLibs rebuild.\\n\\n -- SafeLibs CI <ci@safelibs.org>  %s\\n\\n" \\',
+            '    "$package_name" "$new_version" "$distribution" "$release_date"',
+            '  cat debian/changelog',
+            '} > debian/changelog.new',
+            'mv debian/changelog.new debian/changelog',
             'mk-build-deps -i -r -t "apt-get -y --no-install-recommends" debian/control',
             "dpkg-buildpackage -us -uc -b",
             'cp -v ../*.deb "$SAFEAPTREPO_OUTPUT"/',
