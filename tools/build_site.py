@@ -400,6 +400,30 @@ def copy_build_config(build: dict[str, Any]) -> dict[str, Any]:
     return json.loads(json.dumps(build))
 
 
+def _dedupe_package_names(package_infos: tuple["PackageInfo", ...]) -> tuple[str, ...]:
+    seen: dict[str, None] = {}
+    for info in package_infos:
+        if info.name and info.name not in seen:
+            seen[info.name] = None
+    return tuple(seen)
+
+
+def _runtime_package_infos(
+    package_infos: tuple["PackageInfo", ...],
+) -> tuple["PackageInfo", ...]:
+    return tuple(info for info in package_infos if _is_runtime_package_name(info.name))
+
+
+def _is_runtime_package_name(name: str) -> bool:
+    if not isinstance(name, str) or not name.startswith("lib"):
+        return False
+    if any(name.endswith(suffix) for suffix in RUNTIME_PACKAGE_SUFFIX_EXCLUDES):
+        return False
+    if any(name.startswith(prefix) for prefix in RUNTIME_PACKAGE_PREFIX_EXCLUDES):
+        return False
+    return True
+
+
 def dedupe(values: list[str]) -> list[str]:
     return list(dict.fromkeys(values))
 
@@ -1465,17 +1489,20 @@ def generate_split_site(
     aggregate_path = repository_path(path_prefix, ALL_REPOSITORY_NAME)
     aggregate_id = repository_id(path_prefix, ALL_REPOSITORY_NAME)
 
-    entries_by_name = {str(entry["name"]): entry for entry in config["repositories"]}
-    aggregate_verify_packages: list[str] = []
-    aggregate_verify_all_packages: list[str] = []
-    for repository_name in repository_names:
-        entry = entries_by_name.get(repository_name) or {}
-        for package in entry.get("verify_packages") or []:
-            if package not in aggregate_verify_packages:
-                aggregate_verify_packages.append(package)
-        for package in entry.get("verify_all_packages") or []:
-            if package not in aggregate_verify_all_packages:
-                aggregate_verify_all_packages.append(package)
+    aggregate_package_infos = tuple(
+        generate_site_from_artifacts(
+            config,
+            all_package_paths,
+            output_dir / aggregate_path,
+            template_path=repository_template_path,
+            base_url=join_url(base_url, aggregate_path),
+            repository_name=aggregate_path,
+            repository_id=aggregate_id,
+            channel_name=channel_name,
+            is_aggregate=True,
+            signing_key=resolved_signing_key,
+        )
+    )
 
     published_repositories = [
         PublishedRepository(
@@ -1484,29 +1511,31 @@ def generate_split_site(
             path=aggregate_path,
             repository_id=aggregate_id,
             url=join_url(base_url, aggregate_path),
-            package_infos=tuple(
-                generate_site_from_artifacts(
-                    config,
-                    all_package_paths,
-                    output_dir / aggregate_path,
-                    template_path=repository_template_path,
-                    base_url=join_url(base_url, aggregate_path),
-                    repository_name=aggregate_path,
-                    repository_id=aggregate_id,
-                    channel_name=channel_name,
-                    is_aggregate=True,
-                    signing_key=resolved_signing_key,
-                )
+            package_infos=aggregate_package_infos,
+            verify_packages=_dedupe_package_names(aggregate_package_infos),
+            verify_all_packages=_dedupe_package_names(
+                _runtime_package_infos(aggregate_package_infos)
             ),
-            verify_packages=tuple(aggregate_verify_packages),
-            verify_all_packages=tuple(aggregate_verify_all_packages),
         )
     ]
 
     for repository_name in repository_names:
         repo_path = repository_path(path_prefix, repository_name)
         repo_id = repository_id(path_prefix, repository_name)
-        entry = entries_by_name.get(repository_name) or {}
+        repo_package_infos = tuple(
+            generate_site_from_artifacts(
+                config,
+                repository_artifacts[repository_name],
+                output_dir / repo_path,
+                template_path=repository_template_path,
+                base_url=join_url(base_url, repo_path),
+                repository_name=repo_path,
+                repository_id=repo_id,
+                channel_name=channel_name,
+                is_aggregate=False,
+                signing_key=resolved_signing_key,
+            )
+        )
         published_repositories.append(
             PublishedRepository(
                 channel=channel_name,
@@ -1514,22 +1543,11 @@ def generate_split_site(
                 path=repo_path,
                 repository_id=repo_id,
                 url=join_url(base_url, repo_path),
-                package_infos=tuple(
-                    generate_site_from_artifacts(
-                        config,
-                        repository_artifacts[repository_name],
-                        output_dir / repo_path,
-                        template_path=repository_template_path,
-                        base_url=join_url(base_url, repo_path),
-                        repository_name=repo_path,
-                        repository_id=repo_id,
-                        channel_name=channel_name,
-                        is_aggregate=False,
-                        signing_key=resolved_signing_key,
-                    )
+                package_infos=repo_package_infos,
+                verify_packages=_dedupe_package_names(repo_package_infos),
+                verify_all_packages=_dedupe_package_names(
+                    _runtime_package_infos(repo_package_infos)
                 ),
-                verify_packages=tuple(entry.get("verify_packages") or []),
-                verify_all_packages=tuple(entry.get("verify_all_packages") or []),
             )
         )
 
