@@ -29,7 +29,19 @@ RELEASE_TAG_PREFIX = "build-"
 RELEASE_TAG_COMMIT_CHARS = 12
 DEFAULT_VALIDATOR_SITE_URL = "https://safelibs.github.io/validator/site-data.json"
 DEFAULT_VALIDATOR_MODE = "port-04-test"
-RUNTIME_PACKAGE_SUFFIX_EXCLUDES = ("-dev", "-doc", "-tools", "-progs", "-utils", "-tests")
+RUNTIME_PACKAGE_SUFFIX_EXCLUDES = (
+    "-dev",
+    "-doc",
+    "-tools",
+    "-progs",
+    "-utils",
+    "-tests",
+    "-java",
+    "-perl",
+    "-ruby",
+    "-tcl",
+    "-ocaml",
+)
 RUNTIME_PACKAGE_PREFIX_EXCLUDES = ("gir1.2-", "python3-")
 
 
