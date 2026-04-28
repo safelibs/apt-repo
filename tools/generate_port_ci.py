@@ -354,7 +354,7 @@ def main() -> int:
     args = parse_args()
     config = load_config(args.config)
     archive = config.get("archive") or {}
-    skips = set(args.skip) | {"port-template"}
+    skips = set(args.skip)
     ports = [p for p in port_dirs(args.ports_root) if p.name not in skips]
     written = 0
     unchanged = 0
