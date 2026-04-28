@@ -3,9 +3,8 @@ CONFIG ?= repositories.yml
 SITE_DIR ?= site
 WORK_DIR ?= .work
 BASE_URL ?= https://safelibs.org/apt/
-PORTS_ROOT ?= ..
 
-.PHONY: test build-site verify-docker clean generate-port-ci check-port-ci
+.PHONY: test build-site verify-docker clean
 
 test:
 	$(PYTHON) -m unittest discover -s tests -v
@@ -15,12 +14,6 @@ build-site:
 
 verify-docker:
 	bash scripts/verify-site.sh $(SITE_DIR) $(CONFIG)
-
-generate-port-ci:
-	$(PYTHON) tools/generate_port_ci.py --config $(CONFIG) --ports-root $(PORTS_ROOT)
-
-check-port-ci:
-	$(PYTHON) tools/generate_port_ci.py --config $(CONFIG) --ports-root $(PORTS_ROOT) --dry-run
 
 clean:
 	rm -rf $(SITE_DIR) $(WORK_DIR)

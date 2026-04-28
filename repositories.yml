@@ -65,12 +65,11 @@ testing:
         artifact_globs:
           - "*.deb"
 
-# Per-port build configs consumed only by tools/generate_port_ci.py to
-# render each safelibs/port-* CI workflow. The set of ports actually
-# published in the stable apt index is derived dynamically from the
-# validator (see the validator block above); this section only describes
-# *how* each port's CI builds its .deb artifacts when its build profile
-# departs from the safe-debian default.
+# Per-port build recipes used by tools/build_site.py to build each
+# validating library locally for the stable channel. (Each port repo
+# now owns its own ci-release.yml for its release-channel build, so
+# these recipes describe only how the apt build site reproduces a
+# port's deb when assembling the signed stable index.)
 port_build_overrides:
   - name: libarchive
     build:

@@ -42,15 +42,16 @@ release, regardless of whether the repo has a `04-test` tag.
   stable port set
 - `testing`: discovery rules for the testing channel plus per-port build
   overrides for testing-channel artifact production
-- `port_build_overrides`: per-port build recipes consumed only by
-  `tools/generate_port_ci.py` when rendering each `safelibs/port-*` repo's
-  CI workflow. Any port not listed here uses the default safe-debian build.
+- `port_build_overrides`: per-port build recipes used by
+  `tools/build_site.py` to reproduce a validating port's `.deb` when
+  assembling the stable index. Any port not listed here uses the default
+  safe-debian build.
 
 The set of ports actually published in the stable apt index is derived
 entirely from the validator — no port list lives in `repositories.yml`.
 
-Package builds happen in the individual `safelibs/port-*` repositories. Their
-generated `build-debs` workflow publishes a GitHub release named
+Package builds happen in the individual `safelibs/port-*` repositories. Each
+port's hand-maintained `ci-release` workflow publishes a GitHub release named
 `build-<12-char-sha>` for each pushed commit. During site generation,
 `tools/build_site.py` resolves each configured tag or branch ref to a commit,
 derives the matching release tag from that commit SHA, downloads the `.deb`
