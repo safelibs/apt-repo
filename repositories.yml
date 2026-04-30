@@ -20,7 +20,7 @@ archive:
 
 validator:
   site_url: https://safelibs.github.io/validator/site-data.json
-  mode: port-04-test
+  mode: port
 
 testing:
   discover:

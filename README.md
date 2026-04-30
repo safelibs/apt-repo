@@ -7,7 +7,7 @@ The stable channel is generated dynamically at build time from the SafeLibs
 validator at `https://safelibs.github.io/validator/site-data.json`
 (configurable via the `validator` block in
 [`repositories.yml`](./repositories.yml)). For each fully-passing library in
-the configured proof mode (default `port-04-test`), `tools/build_site.py`
+the configured proof mode (default `port`), `tools/build_site.py`
 synthesizes a stable-channel entry — port repository, pinned tag/commit,
 verify packages, and runtime subset — directly from the validator payload.
 There is no checked-in list of ports to publish: as validator results change,

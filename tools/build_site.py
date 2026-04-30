@@ -28,7 +28,7 @@ MAX_FAILURE_OUTPUT_CHARS = 12000
 RELEASE_TAG_PREFIX = "build-"
 RELEASE_TAG_COMMIT_CHARS = 12
 DEFAULT_VALIDATOR_SITE_URL = "https://safelibs.github.io/validator/site-data.json"
-DEFAULT_VALIDATOR_MODE = "port-04-test"
+DEFAULT_VALIDATOR_MODE = "port"
 RUNTIME_PACKAGE_SUFFIX_EXCLUDES = (
     "-dev",
     "-doc",
